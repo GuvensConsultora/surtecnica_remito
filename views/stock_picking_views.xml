@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============ FORMULARIO DEL ALBARAN ============ -->
+    <record id="view_picking_form_remito" model="ir.ui.view">
+        <field name="name">stock.picking.form.remito</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.view_picking_form"/>
+        <field name="arch" type="xml">
+
+            <!-- El número del talonario va arriba, al lado del cliente: es lo primero
+                 que se carga al tener el papel en la mano. -->
+            <xpath expr="//field[@name='partner_id']" position="after">
+                <field name="guvens_remito_number" placeholder="0002-00010576"/>
+            </xpath>
+
+            <xpath expr="//notebook" position="inside">
+                <page name="remito" string="Remito">
+                    <group>
+                        <group string="Datos del remito">
+                            <field name="guvens_remito_oc" placeholder="06565"/>
+                            <field name="guvens_remito_imprime_precios"/>
+                        </group>
+                        <group string="Envío">
+                            <field name="guvens_remito_bultos" placeholder="1 PALLET"/>
+                            <field name="guvens_remito_flete" placeholder="FLETE DESTINO"/>
+                            <field name="guvens_remito_valor_declarado" placeholder="$ 250.000 PESOS"/>
+                            <field name="guvens_remito_direccion_entrega"
+                                   placeholder="RETIRA EN TERMINAL DE NEUQUEN CAPITAL"/>
+                        </group>
+                    </group>
+                    <group string="Otras observaciones">
+                        <field name="guvens_remito_observaciones" nolabel="1"
+                               placeholder="Lo que haga falta aclarar en el remito."/>
+                    </group>
+                </page>
+            </xpath>
+
+        </field>
+    </record>
+
+    <!-- ============ LISTA ============ -->
+    <record id="vpicktree_remito" model="ir.ui.view">
+        <field name="name">stock.picking.tree.remito</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.vpicktree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='name']" position="after">
+                <field name="guvens_remito_number" string="Nº remito" optional="show"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ============ ACCION Y MENU ============ -->
+    <record id="action_remitos" model="ir.actions.act_window">
+        <field name="name">Remitos</field>
+        <field name="res_model">stock.picking</field>
+        <field name="view_mode">tree,kanban,form</field>
+        <field name="domain">[('picking_type_id.code', '=', 'outgoing')]</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Acá aparecen las entregas de los pedidos de venta
+            </p>
+            <p>
+                Cada entrega se crea sola cuando se confirma un pedido. Para hacer el
+                remito: abrila, cargá el número del talonario de papel y usá
+                Imprimir → Remito.
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_remitos"
+              name="Remitos"
+              parent="stock.menu_stock_warehouse_mgmt"
+              action="action_remitos"
+              sequence="7"/>
+
+</odoo>

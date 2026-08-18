@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!--
+        Los menús generales de Odoo quedan atados al grupo "Menú completo".
+
+        Se REEMPLAZAN los grupos con (6, 0, [...]) en vez de agregarlos con (4, ...):
+        `groups_id` en un menú funciona como O lógico — el usuario lo ve si tiene
+        alguno de los grupos listados —, así que sumar un grupo ampliaría la
+        visibilidad en lugar de restringirla.
+
+        El estado anterior de cada menú quedó respaldado en
+        fuente/backup_menus_victor_2026-08-18.json para poder revertirlo.
+
+        Los grupos que se reemplazan eran "Usuario interno" o directamente ninguno,
+        de modo que quien recibe "Menú completo" —todos los usuarios internos que
+        existían al instalar— sigue viendo exactamente lo mismo que antes.
+    -->
+
+    <record id="mail.menu_root_discuss" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('surtecnica_remito.group_menu_completo')])]"/>
+    </record>
+
+    <record id="calendar.mail_menu_calendar" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('surtecnica_remito.group_menu_completo')])]"/>
+    </record>
+
+    <record id="project_todo.menu_todo_todos" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('surtecnica_remito.group_menu_completo')])]"/>
+    </record>
+
+    <record id="contacts.menu_contacts" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('surtecnica_remito.group_menu_completo')])]"/>
+    </record>
+
+    <record id="spreadsheet_dashboard.spreadsheet_dashboard_menu_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('surtecnica_remito.group_menu_completo')])]"/>
+    </record>
+
+    <record id="sign.menu_document" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('surtecnica_remito.group_menu_completo')])]"/>
+    </record>
+
+    <record id="hr.menu_hr_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('surtecnica_remito.group_menu_completo')])]"/>
+    </record>
+
+    <record id="hr_holidays.menu_hr_holidays_root" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('surtecnica_remito.group_menu_completo')])]"/>
+    </record>
+
+    <!--
+        Apps: en esta instancia el menú quedó SIN restricción de grupo, o sea visible
+        para cualquier usuario interno. Odoo lo entrega restringido a Administración /
+        Ajustes. Acá se lo ata a "Menú completo" para no cambiarle nada a los usuarios
+        actuales; devolverlo al estándar (base.group_system) es una decisión aparte,
+        porque se lo quitaría a quienes hoy no son administradores.
+    -->
+    <record id="base.menu_management" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('surtecnica_remito.group_menu_completo')])]"/>
+    </record>
+
+</odoo>

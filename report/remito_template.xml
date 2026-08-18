@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+<template id="report_remito">
+    <t t-call="web.basic_layout">
+        <t t-foreach="docs" t-as="doc">
+
+            <t t-set="empresa" t-value="doc.company_id"/>
+            <t t-set="cliente" t-value="doc.partner_id"/>
+            <t t-set="lineas"
+               t-value="doc.move_ids_without_package.filtered(lambda m: m.state != 'cancel' and m._guvens_remito_cantidad())"/>
+            <t t-set="moneda"
+               t-value="lineas and lineas[0]._guvens_remito_moneda() or empresa.currency_id"/>
+            <t t-set="total" t-value="sum(lineas.mapped(lambda m: m._guvens_remito_importe()))"/>
+            <t t-set="fecha_remito" t-value="doc.date_done or doc.scheduled_date"/>
+
+            <div class="page rem-doc">
+
+                <style>
+                    .rem-doc { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #000; }
+                    .rem-doc table { width: 100%; border-collapse: collapse; }
+                    .rem-doc td, .rem-doc th { vertical-align: top; padding: 0; }
+                    .rem-titulo { font-size: 21px; letter-spacing: 1px; }
+                    .rem-numero { font-size: 21px; margin-left: 16px; }
+                    .rem-emisor { font-size: 11px; line-height: 1.35; }
+                    .rem-emisor .rem-razon { font-weight: bold; font-style: italic; }
+                    .rem-regla { border-top: 1px solid #000; margin: 8px 0 6px 0; }
+                    .rem-cliente td { padding: 1px 0; }
+                    .rem-items { margin-top: 4px; }
+                    .rem-items td { padding: 1px 0; }
+                    /* El item real se escribe en la linea del pedido y puede ser largo:
+                       la columna parte la palabra antes que desbordar la hoja. */
+                    .rem-desc { word-wrap: break-word; overflow-wrap: break-word; }
+                    .rem-num { text-align: right; white-space: nowrap; }
+                    .rem-cant { text-align: left; white-space: nowrap; }
+                    .rem-recepcion { margin: 46px 0 0 0; padding-left: 32%; line-height: 1.5; font-size: 12px; }
+                    .rem-pie { margin-top: 34px; }
+                    .rem-leyenda { font-weight: bold; }
+                    .rem-obs { line-height: 1.35; }
+                    .rem-total { font-size: 12px; text-align: right; white-space: nowrap; }
+                </style>
+
+                <!-- ================= ENCABEZADO ================= -->
+                <table>
+                    <tr>
+                        <td style="width: 42%;">
+                            <img t-if="empresa.logo"
+                                 t-att-src="image_data_uri(empresa.logo)"
+                                 style="max-height: 48px; max-width: 100%;"
+                                 alt="Logo"/>
+                        </td>
+                        <td style="width: 58%;">
+                            <div>
+                                <span class="rem-titulo">REMITO</span>
+                                <span class="rem-numero" t-esc="doc.guvens_remito_number or ''"/>
+                            </div>
+                            <div t-if="fecha_remito" style="margin-top: 2px;">
+                                <span t-esc="fecha_remito"
+                                      t-options="{'widget': 'datetime', 'format': 'dd/MM/yyyy'}"/>
+                                <span style="margin-left: 14px;"
+                                      t-esc="fecha_remito"
+                                      t-options="{'widget': 'datetime', 'format': 'HH:mm'}"/>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- ================= EMISOR ================= -->
+                <div class="rem-emisor" style="margin-top: 6px;">
+                    <div class="rem-razon" t-field="empresa.partner_id.name"/>
+                    <div t-esc="', '.join([p for p in [empresa.partner_id.street, empresa.partner_id.street2, empresa.partner_id.city] if p])"/>
+                    <div>
+                        <span t-field="empresa.partner_id.state_id.name"/>
+                        <span t-if="empresa.partner_id.zip"> CP <span t-field="empresa.partner_id.zip"/></span>
+                    </div>
+                    <div t-if="empresa.partner_id.phone">TEL. VENTAS <span t-field="empresa.partner_id.phone"/></div>
+                    <div t-if="empresa.partner_id.email" t-field="empresa.partner_id.email"/>
+                </div>
+
+                <div class="rem-regla"/>
+
+                <!-- ================= CLIENTE ================= -->
+                <table class="rem-cliente">
+                    <tr>
+                        <td style="width: 58%;">RAZON SOCIAL : <span t-field="cliente.name"/></td>
+                        <td style="width: 42%;"/>
+                    </tr>
+                    <tr>
+                        <td>DIRECCION : <span t-esc="', '.join([p for p in [cliente.street, cliente.street2, cliente.city] if p])"/></td>
+                        <td>TELEFONO <span t-esc="cliente.phone or cliente.mobile or '-'"/></td>
+                    </tr>
+                    <tr>
+                        <td><span t-field="cliente.l10n_ar_afip_responsibility_type_id.name"/></td>
+                        <td>CUIT : <span t-esc="cliente.vat or ''"/></td>
+                    </tr>
+                </table>
+
+                <!-- Condicion de venta: sale del plazo de pago del pedido; si no hay
+                     ninguno cargado no se imprime nada, en vez de suponerlo. -->
+                <div t-if="doc.sale_id.payment_term_id" style="margin-top: 6px;">
+                    <span t-field="doc.sale_id.payment_term_id.name"/>
+                </div>
+
+                <div class="rem-regla"/>
+
+                <!-- ================= ITEMS ================= -->
+                <table class="rem-items">
+                    <t t-foreach="lineas" t-as="linea">
+                        <tr>
+                            <td style="width: 11%;">
+                                <span t-esc="linea.product_id.default_code or ''"/>
+                            </td>
+                            <td class="rem-cant" style="width: 7%;">
+                                <span t-esc="linea._guvens_remito_cantidad()"
+                                      t-options="{'widget': 'float', 'precision': 0}"/>
+                            </td>
+                            <td class="rem-desc" style="width: 52%; padding-left: 8px;">
+                                <span t-esc="linea._guvens_remito_descripcion()"/>
+                            </td>
+                            <td class="rem-num" style="width: 15%;">
+                                <span t-if="doc.guvens_remito_imprime_precios"
+                                      t-esc="linea._guvens_remito_precio_unitario()"
+                                      t-options="{'widget': 'monetary', 'display_currency': moneda}"/>
+                            </td>
+                            <td class="rem-num" style="width: 15%;">
+                                <span t-if="doc.guvens_remito_imprime_precios"
+                                      t-esc="linea._guvens_remito_importe()"
+                                      t-options="{'widget': 'monetary', 'display_currency': moneda}"/>
+                            </td>
+                        </tr>
+                    </t>
+                </table>
+
+                <div class="rem-regla"/>
+
+                <!-- ================= RECEPCION (se completa a mano) ================= -->
+                <div class="rem-recepcion">
+                    <div>ENTREGADO</div>
+                    <div>FECHA</div>
+                    <div>NOMBRE Y APELLIDO</div>
+                    <div>TRANSPORTE</div>
+                </div>
+
+                <!-- ================= PIE ================= -->
+                <table class="rem-pie">
+                    <tr>
+                        <td style="width: 70%;">
+                            <div class="rem-leyenda" t-if="doc.guvens_remito_imprime_precios">Precios No Incluyen IVA</div>
+                            <div class="rem-obs" style="margin-top: 2px;">
+                                <div t-if="doc.guvens_remito_oc">OC: <span t-field="doc.guvens_remito_oc"/></div>
+                                <div t-if="doc.guvens_remito_bultos">BULTO: <span t-field="doc.guvens_remito_bultos"/></div>
+                                <div t-if="doc.guvens_remito_flete"><span t-field="doc.guvens_remito_flete"/></div>
+                                <div t-if="doc.guvens_remito_valor_declarado">VALOR DECLARADO <span t-field="doc.guvens_remito_valor_declarado"/></div>
+                                <div t-if="doc.guvens_remito_direccion_entrega">DIRECCION: <span t-field="doc.guvens_remito_direccion_entrega"/></div>
+                                <div t-if="doc.guvens_remito_observaciones" style="white-space: pre-line;"
+                                     t-field="doc.guvens_remito_observaciones"/>
+                                <div t-if="doc.origin" style="margin-top: 4px;">PEDIDO: <span t-field="doc.origin"/></div>
+                            </div>
+                        </td>
+                        <td class="rem-total" style="width: 30%;">
+                            <div t-if="doc.guvens_remito_imprime_precios" style="margin-top: 40px;">
+                                <span t-esc="total"
+                                      t-options="{'widget': 'monetary', 'display_currency': moneda}"/>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+
+            </div>
+        </t>
+    </t>
+</template>
+
+</odoo>

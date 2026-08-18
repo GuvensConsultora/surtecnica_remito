@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="module_category_surtecnica" model="ir.module.category">
+        <field name="name">Sur Técnica</field>
+        <field name="sequence">90</field>
+    </record>
+
+    <record id="group_menu_completo" model="res.groups">
+        <field name="name">Menú completo</field>
+        <field name="category_id" ref="module_category_surtecnica"/>
+        <field name="comment">Habilita las apps generales de Odoo (Conversaciones, Calendario,
+Contactos, Tablero, Actividades, Empleados, Ausencias, Sign y Apps).
+
+Quien no tenga este permiso ve únicamente las apps que le habilitan sus otros
+grupos. Se usa para dejar una pantalla acotada a quien trabaja sobre una sola
+tarea y no necesita el resto del sistema a la vista.</field>
+    </record>
+
+</odoo>
