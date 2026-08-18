@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<odoo noupdate="1">
+<odoo>
     <!--
         Los menús generales de Odoo quedan atados al grupo "Menú completo".
 
@@ -56,6 +56,15 @@
         porque se lo quitaría a quienes hoy no son administradores.
     -->
     <record id="base.menu_management" model="ir.ui.menu">
+        <field name="groups_id" eval="[(6, 0, [ref('surtecnica_remito.group_menu_completo')])]"/>
+    </record>
+
+    <!--
+        Link Tracker depende de "Technical Features", que llega arrastrado por ser
+        Administrador de Inventario. Atarlo acá lo saca de la vista de quien no tenga
+        "Menú completo", sin necesidad de bajarle el nivel de permiso a nadie.
+    -->
+    <record id="utm.menu_link_tracker_root" model="ir.ui.menu">
         <field name="groups_id" eval="[(6, 0, [ref('surtecnica_remito.group_menu_completo')])]"/>
     </record>
 
