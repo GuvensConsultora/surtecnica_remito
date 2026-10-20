@@ -1,6 +1,6 @@
 {
     'name': 'Surtecnica - Remito desde el pedido de venta',
-    'version': '17.0.1.3.0',
+    'version': '17.0.1.4.0',
     'category': 'Inventory/Inventory',
     'summary': 'Imprime el remito con el formato del preimpreso, tomando los datos del pedido de venta',
     'description': """
@@ -31,6 +31,11 @@ Qué hace
   OC del cliente, bultos, flete, valor declarado y dirección de entrega.
 * Imprime el remito A4 tomando la descripción de la línea del pedido de venta, no
   del producto.
+* Marca en la ficha del cliente si exige HES para facturar: el código de conformidad
+  que algunos clientes emiten al recibir la mercadería y sin el cual rechazan la
+  factura. A esos clientes no se les reclama el plazo de facturación, porque el
+  momento de facturar no depende de Sur Técnica. Nace desmarcado y lo carga
+  administración: no hay forma de deducirlo del sistema.
 
 Qué NO hace
 -----------
@@ -53,6 +58,7 @@ el albarán validado; este imprime el bloque de recepción para firmar a mano.
     'data': [
         'security/remito_security.xml',
         'data/menu_restriccion.xml',
+        'views/res_partner_views.xml',
         'views/stock_picking_views.xml',
         'report/remito_report.xml',
         'report/remito_template.xml',

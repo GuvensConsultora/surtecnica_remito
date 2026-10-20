@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============ FICHA DEL CLIENTE ============ -->
+    <record id="view_partner_form_remito_hes" model="ir.ui.view">
+        <field name="name">res.partner.form.remito.hes</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+
+            <!-- Va en el grupo "Ventas" de la pestaña Ventas y compras, junto a las
+                 condiciones de pago y la lista de precios: es una condición más de
+                 cómo se le factura a ese cliente. -->
+            <xpath expr="//group[@name='sale']" position="inside">
+                <field name="guvens_requiere_hes"/>
+            </xpath>
+
+        </field>
+    </record>
+
+    <!-- ============ BUSQUEDA ============ -->
+    <record id="view_res_partner_filter_remito_hes" model="ir.ui.view">
+        <field name="name">res.partner.search.remito.hes</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_res_partner_filter"/>
+        <field name="arch" type="xml">
+
+            <!-- Para poder listar de una los que ya están marcados y revisar la carga,
+                 que se hace cliente por cliente. -->
+            <xpath expr="//search" position="inside">
+                <filter name="guvens_requiere_hes" string="Requiere HES para facturar"
+                        domain="[('guvens_requiere_hes', '=', True)]"/>
+            </xpath>
+
+        </field>
+    </record>
+
+</odoo>
