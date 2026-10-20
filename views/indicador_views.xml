@@ -14,7 +14,7 @@
                 <field name="partner_id" string="Cliente"/>
                 <field name="guvens_remito_fecha" string="Confeccionado"/>
                 <field name="guvens_factura_id" string="Factura"/>
-                <field name="guvens_dias_a_factura" string="Días hábiles" sum="Total"/>
+                <field name="guvens_dias_a_factura" string="Días hábiles" avg="Promedio"/>
                 <field name="guvens_plazo_estado" string="Estado"/>
                 <field name="company_id" groups="base.group_multi_company" optional="hide"/>
             </tree>
