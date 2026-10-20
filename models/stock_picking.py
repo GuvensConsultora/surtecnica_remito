@@ -14,6 +14,17 @@ class StockPicking(models.Model):
              "talonario, así que tiene que llevar el mismo número.",
     )
 
+    guvens_remito_fecha = fields.Datetime(
+        string="Remito confeccionado el",
+        readonly=True,
+        copy=False,
+        help="Momento en que se cargó el número del talonario. Lo pone el sistema "
+             "solo y es el que arranca el reloj del plazo de facturación.\n\n"
+             "Se estampa una sola vez: corregir un dígito del número después no lo "
+             "mueve, porque el remito se confeccionó cuando se confeccionó. Si en "
+             "cambio se borra el número, la fecha se limpia.",
+    )
+
     # --- bloque de observaciones que hoy se escribe en el impreso ---
     guvens_remito_oc = fields.Char(
         string="OC del cliente",
@@ -40,12 +51,32 @@ class StockPicking(models.Model):
         for vals in vals_list:
             if vals.get("guvens_remito_number"):
                 vals["guvens_remito_number"] = vals["guvens_remito_number"].strip()
+                vals.setdefault("guvens_remito_fecha", fields.Datetime.now())
         return super().create(vals_list)
 
     def write(self, vals):
+        """Estampa el sello de confección cuando aparece el número del talonario.
+
+        El sello va DESPUÉS del super() y registro por registro, no dentro de `vals`:
+        un mismo write puede alcanzar varios albaranes, unos con fecha y otros sin
+        ella, y meterlo en `vals` se la pisaría a los que ya la tenían —que es
+        justamente el dato que no se puede recuperar—.
+        """
         if vals.get("guvens_remito_number"):
             vals["guvens_remito_number"] = vals["guvens_remito_number"].strip()
-        return super().write(vals)
+        elif "guvens_remito_number" in vals:
+            # Le borraron el número: el remito dejó de estar confeccionado.
+            vals["guvens_remito_fecha"] = False
+
+        resultado = super().write(vals)
+
+        if vals.get("guvens_remito_number"):
+            sin_sello = self.filtered(lambda p: not p.guvens_remito_fecha)
+            if sin_sello:
+                super(StockPicking, sin_sello).write({
+                    "guvens_remito_fecha": fields.Datetime.now(),
+                })
+        return resultado
 
     @api.constrains("guvens_remito_number", "company_id")
     def _check_guvens_remito_number(self):

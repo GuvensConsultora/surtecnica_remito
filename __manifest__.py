@@ -1,6 +1,6 @@
 {
     'name': 'Surtecnica - Remito desde el pedido de venta',
-    'version': '17.0.1.4.0',
+    'version': '17.0.1.5.0',
     'category': 'Inventory/Inventory',
     'summary': 'Imprime el remito con el formato del preimpreso, tomando los datos del pedido de venta',
     'description': """
@@ -31,6 +31,9 @@ Qué hace
   OC del cliente, bultos, flete, valor declarado y dirección de entrega.
 * Imprime el remito A4 tomando la descripción de la línea del pedido de venta, no
   del producto.
+* Estampa la fecha en que se cargó el número del talonario. Es el hito con el que
+  arranca el plazo de facturación: el remito quedó confeccionado. Se pone una sola
+  vez —corregir un dígito después no la mueve— y se limpia si se borra el número.
 * Marca en la ficha del cliente si exige HES para facturar: el código de conformidad
   que algunos clientes emiten al recibir la mercadería y sin el cual rechazan la
   factura. A esos clientes no se les reclama el plazo de facturación, porque el
