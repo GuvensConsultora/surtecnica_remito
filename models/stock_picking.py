@@ -50,6 +50,11 @@ class StockPicking(models.Model):
         string="Días hábiles hasta la factura",
         compute="_compute_guvens_plazo",
         store=True,
+        # El agregado lo decide el modelo, no la vista: un `avg=""` en el XML sólo
+        # cambia la etiqueta, mientras el read_group del servidor sigue devolviendo
+        # la suma (medido el 20/10: el grupo "Excedido" mostraba 301 días). Y sumar
+        # días de distintos remitos no significa nada; el promedio sí.
+        group_operator="avg",
         help="Días hábiles entre el día en que se confeccionó el remito y el día en "
              "que se emitió la factura, según el calendario laboral de la compañía. "
              "El día del remito no cuenta: un remito del viernes facturado el lunes "
