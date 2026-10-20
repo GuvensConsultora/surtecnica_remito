@@ -1,6 +1,6 @@
 {
     'name': 'Surtecnica - Remito desde el pedido de venta',
-    'version': '17.0.1.5.0',
+    'version': '17.0.1.6.0',
     'category': 'Inventory/Inventory',
     'summary': 'Imprime el remito con el formato del preimpreso, tomando los datos del pedido de venta',
     'description': """
@@ -34,6 +34,13 @@ Qué hace
 * Estampa la fecha en que se cargó el número del talonario. Es el hito con el que
   arranca el plazo de facturación: el remito quedó confeccionado. Se pone una sola
   vez —corregir un dígito después no la mueve— y se limpia si se borra el número.
+* Mide el plazo de facturación: días hábiles entre que se confecciona el remito y
+  se emite la factura del pedido, con el calendario laboral de la compañía (los
+  feriados no suman, siempre que estén cargados ahí). El plazo contra el que se
+  compara se carga en la ficha de la compañía y nace vacío: mientras tanto se miden
+  los días pero no se marca a nadie como excedido. Los pedidos con varias entregas
+  o varias facturas quedan como «No determinable» en vez de recibir un plazo que no
+  se puede atribuir. Menú: Inventario > Operaciones > Plazo de facturación.
 * Marca en la ficha del cliente si exige HES para facturar: el código de conformidad
   que algunos clientes emiten al recibir la mercadería y sin el cual rechazan la
   factura. A esos clientes no se les reclama el plazo de facturación, porque el
@@ -57,12 +64,16 @@ el albarán validado; este imprime el bloque de recepción para firmar a mano.
         'stock',
         'sale_stock',
         'l10n_ar',
+        'account',
+        'resource',
     ],
     'data': [
         'security/remito_security.xml',
         'data/menu_restriccion.xml',
+        'views/res_company_views.xml',
         'views/res_partner_views.xml',
         'views/stock_picking_views.xml',
+        'views/indicador_views.xml',
         'report/remito_report.xml',
         'report/remito_template.xml',
     ],

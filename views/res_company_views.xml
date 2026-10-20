@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- En la ficha de la compañía y no en Ajustes, igual que el cotizador: el plazo
+         es un dato de cómo trabaja la empresa, y cada razón social puede fijar el
+         suyo. -->
+    <record id="view_company_form_remito" model="ir.ui.view">
+        <field name="name">res.company.form.remito</field>
+        <field name="model">res.company</field>
+        <field name="inherit_id" ref="base.view_company_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Remitos" name="remito">
+                    <group>
+                        <field name="guvens_plazo_facturacion_dias"/>
+                    </group>
+                    <p class="text-muted">
+                        Mientras esté vacío, el sistema mide igual los días que pasan
+                        entre el remito y la factura, pero no marca a nadie como
+                        excedido.
+                    </p>
+                    <p class="text-muted">
+                        Los días se cuentan con el calendario laboral de la compañía.
+                        Los feriados no suman, pero sólo si están cargados ahí, en
+                        Horarios de trabajo (Nómina › Configuración › Entradas de
+                        trabajo). Hoy no hay ninguno cargado.
+                    </p>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

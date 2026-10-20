@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============ LISTA DEL INDICADOR ============ -->
+    <record id="view_picking_tree_plazo" model="ir.ui.view">
+        <field name="name">stock.picking.tree.plazo</field>
+        <field name="model">stock.picking</field>
+        <field name="arch" type="xml">
+            <!-- El estado va como texto, nunca como color solo: el color no alcanza
+                 para distinguir "dentro del plazo" de "excedido". -->
+            <tree string="Plazo de facturación" create="false" default_order="guvens_remito_fecha desc">
+                <field name="name" string="Remito"/>
+                <field name="guvens_remito_number" string="Nº talonario"/>
+                <field name="partner_id" string="Cliente"/>
+                <field name="guvens_remito_fecha" string="Confeccionado"/>
+                <field name="guvens_factura_id" string="Factura"/>
+                <field name="guvens_dias_a_factura" string="Días hábiles" sum="Total"/>
+                <field name="guvens_plazo_estado" string="Estado"/>
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ============ MATRIZ ============ -->
+    <record id="view_picking_pivot_plazo" model="ir.ui.view">
+        <field name="name">stock.picking.pivot.plazo</field>
+        <field name="model">stock.picking</field>
+        <field name="arch" type="xml">
+            <pivot string="Plazo de facturación" sample="0">
+                <field name="guvens_plazo_estado" type="col"/>
+                <field name="guvens_remito_fecha" interval="month" type="row"/>
+                <field name="guvens_dias_a_factura" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="view_picking_graph_plazo" model="ir.ui.view">
+        <field name="name">stock.picking.graph.plazo</field>
+        <field name="model">stock.picking</field>
+        <field name="arch" type="xml">
+            <graph string="Plazo de facturación" type="bar" sample="0">
+                <field name="guvens_remito_fecha" interval="month"/>
+                <field name="guvens_dias_a_factura" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <!-- ============ BUSQUEDA ============ -->
+    <record id="view_picking_search_plazo" model="ir.ui.view">
+        <field name="name">stock.picking.search.plazo</field>
+        <field name="model">stock.picking</field>
+        <field name="arch" type="xml">
+            <search string="Plazo de facturación">
+                <field name="guvens_remito_number" string="Nº de talonario"/>
+                <field name="partner_id"/>
+                <field name="guvens_factura_id"/>
+
+                <filter name="excedido" string="Excedidos"
+                        domain="[('guvens_plazo_estado', '=', 'excedido')]"/>
+                <filter name="en_plazo" string="Dentro del plazo"
+                        domain="[('guvens_plazo_estado', '=', 'en_plazo')]"/>
+                <filter name="pendiente" string="Pendientes de facturar"
+                        domain="[('guvens_plazo_estado', '=', 'pendiente')]"/>
+                <separator/>
+                <!-- El corte que pidió Franco: comparar los dos grupos. -->
+                <filter name="con_hes" string="Clientes con HES"
+                        domain="[('partner_id.guvens_requiere_hes', '=', True)]"/>
+                <filter name="sin_hes" string="Clientes sin HES"
+                        domain="[('partner_id.guvens_requiere_hes', '=', False)]"/>
+                <separator/>
+                <filter name="revisar" string="Para revisar a mano"
+                        domain="[('guvens_plazo_estado', 'in', ['indeterminado', 'previo'])]"
+                        help="Pedidos con varias entregas o varias facturas, y los que
+                              se facturaron antes de entregar."/>
+
+                <group expand="0" string="Agrupar por">
+                    <filter name="g_estado" string="Estado del plazo"
+                            context="{'group_by': 'guvens_plazo_estado'}"/>
+                    <filter name="g_cliente" string="Cliente"
+                            context="{'group_by': 'partner_id'}"/>
+                    <filter name="g_mes" string="Mes del remito"
+                            context="{'group_by': 'guvens_remito_fecha:month'}"/>
+                    <filter name="g_compania" string="Compañía"
+                            context="{'group_by': 'company_id'}"
+                            groups="base.group_multi_company"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ============ ACCION Y MENU ============ -->
+    <record id="action_plazo_facturacion" model="ir.actions.act_window">
+        <field name="name">Plazo de facturación</field>
+        <field name="res_model">stock.picking</field>
+        <field name="view_mode">tree,pivot,graph,form</field>
+        <field name="domain">[('guvens_remito_fecha', '!=', False)]</field>
+        <field name="search_view_id" ref="view_picking_search_plazo"/>
+        <field name="context">{'search_default_g_estado': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Todavía no hay remitos con fecha de confección
+            </p>
+            <p>
+                El reloj de cada remito arranca cuando se carga el número del
+                talonario. Acá aparecen los que ya lo tienen, con los días hábiles
+                que pasaron hasta la factura.
+            </p>
+        </field>
+    </record>
+
+    <record id="action_plazo_facturacion_tree" model="ir.actions.act_window.view">
+        <field name="sequence">1</field>
+        <field name="view_mode">tree</field>
+        <field name="view_id" ref="view_picking_tree_plazo"/>
+        <field name="act_window_id" ref="action_plazo_facturacion"/>
+    </record>
+    <record id="action_plazo_facturacion_pivot" model="ir.actions.act_window.view">
+        <field name="sequence">2</field>
+        <field name="view_mode">pivot</field>
+        <field name="view_id" ref="view_picking_pivot_plazo"/>
+        <field name="act_window_id" ref="action_plazo_facturacion"/>
+    </record>
+    <record id="action_plazo_facturacion_graph" model="ir.actions.act_window.view">
+        <field name="sequence">3</field>
+        <field name="view_mode">graph</field>
+        <field name="view_id" ref="view_picking_graph_plazo"/>
+        <field name="act_window_id" ref="action_plazo_facturacion"/>
+    </record>
+
+    <menuitem id="menu_plazo_facturacion"
+              name="Plazo de facturación"
+              parent="stock.menu_stock_warehouse_mgmt"
+              action="action_plazo_facturacion"
+              sequence="8"/>
+
+</odoo>

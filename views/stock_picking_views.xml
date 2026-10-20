@@ -16,6 +16,10 @@
                      cuando existe: un campo de fecha vacío al lado del número invita a
                      completarlo, y no es algo que se cargue a mano. -->
                 <field name="guvens_remito_fecha" invisible="not guvens_remito_fecha"/>
+                <field name="guvens_plazo_estado" invisible="not guvens_plazo_estado"/>
+                <field name="guvens_dias_a_factura"
+                       invisible="guvens_plazo_estado in [False, 'pendiente', 'previo', 'indeterminado']"/>
+                <field name="guvens_factura_id" invisible="not guvens_factura_id"/>
             </xpath>
 
             <xpath expr="//notebook" position="inside">
