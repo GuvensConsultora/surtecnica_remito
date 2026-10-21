@@ -59,13 +59,21 @@ class TestAvisoFacturar(TransactionCase):
         remito.guvens_remito_number = "9003-00000004"
         self.assertEqual(len(self._avisos(remito)), 1)
 
-    def test_no_avisa_si_el_cliente_exige_hes(self):
-        """Ahí el momento de facturar no depende de Sur Técnica: reclamarlo es ruido."""
+    def test_tambien_avisa_si_el_cliente_exige_hes(self):
+        """El aviso es genérico, como lo pidió Franco.
+
+        A esos clientes el aviso les queda pendiente hasta que mande el código, en
+        vez de no existir: si no se creara, cuando llega la HES no habría nada que
+        le recuerde a nadie emitir la factura. Lo que no corresponde es reclamarles
+        el plazo, y de eso se ocupa el indicador, que los marca «Cliente con HES».
+        """
         self.env.company.guvens_aviso_facturacion_user_id = self.destinatario
         conhes = self.env["res.partner"].create({
             "name": "Cliente con HES", "guvens_requiere_hes": True})
         remito = self._remito("9003-00000005", cliente=conhes)
-        self.assertFalse(self._avisos(remito))
+        avisos = self._avisos(remito)
+        self.assertEqual(len(avisos), 1)
+        self.assertIn("HES", avisos.note or "")
 
     def test_borrar_el_numero_saca_el_aviso(self):
         self.env.company.guvens_aviso_facturacion_user_id = self.destinatario

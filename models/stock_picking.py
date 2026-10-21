@@ -295,10 +295,19 @@ class StockPicking(models.Model):
     def _guvens_crear_aviso_facturar(self):
         """Avisa a quien factura que hay un remito confeccionado.
 
-        No se avisa si: no hay destinatario cargado en la compañía, el cliente exige
-        HES (ahí facturar no depende de nosotros), el remito ya tiene factura, o ya
-        hay un aviso abierto. El vencimiento sale del plazo de la compañía, contado
-        en días hábiles como el resto del indicador.
+        El aviso es GENÉRICO: se crea para todos los clientes, también para los que
+        exigen HES. Franco lo pidió así —«lo podemos configurar como genérico esa
+        alerta y le quedarán como pendiente a aquellos clientes que todavía no
+        tengan la HES»—: en esos casos el aviso queda abierto hasta que llegue el
+        código, en vez de no existir. Si no se creara, cuando el cliente manda la
+        HES no habría nada que le recuerde a nadie emitir la factura.
+
+        Lo que NO corresponde a los clientes con HES es reclamarles el plazo, y eso
+        se resuelve del otro lado: el indicador los marca «Cliente con HES» y nunca
+        «Excedido».
+
+        No se avisa si: no hay destinatario cargado en la compañía, el remito ya
+        tiene factura, o ya hay un aviso abierto.
         """
         tipo = self._guvens_tipo_actividad_aviso()
         if not tipo:
@@ -306,8 +315,6 @@ class StockPicking(models.Model):
         for picking in self:
             destinatario = picking.company_id.guvens_aviso_facturacion_user_id
             if not destinatario or not picking.guvens_remito_fecha:
-                continue
-            if picking.partner_id.guvens_requiere_hes:
                 continue
             if picking.guvens_factura_id:
                 continue
@@ -321,12 +328,15 @@ class StockPicking(models.Model):
                 "surtecnica_remito.activity_facturar_remito",
                 date_deadline=vence,
                 user_id=destinatario.id,
-                note=_("Remito %(numero)s de %(cliente)s — confeccionado el %(fecha)s",
+                note=_("Remito %(numero)s de %(cliente)s — confeccionado el %(fecha)s%(espera)s",
                        numero=picking.guvens_remito_number or picking.name,
                        # sin punto final: muchas razones sociales ya terminan en
                        # uno («4 L S.A.») y quedaba «S.A..»
                        cliente=(picking.partner_id.display_name or "-").rstrip("."),
-                       fecha=dia.strftime("%d/%m/%Y")),
+                       fecha=dia.strftime("%d/%m/%Y"),
+                       espera=_(". Este cliente factura contra HES: queda pendiente "
+                                "hasta que mande el código.")
+                       if picking.partner_id.guvens_requiere_hes else ""),
             )
 
     def action_guvens_generar_avisos_pendientes(self, dias_max=7):

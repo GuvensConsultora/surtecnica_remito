@@ -1,6 +1,6 @@
 {
     'name': 'Surtecnica - Remito desde el pedido de venta',
-    'version': '17.0.1.11.0',
+    'version': '17.0.1.12.0',
     'category': 'Inventory/Inventory',
     'summary': 'Imprime el remito con el formato del preimpreso, tomando los datos del pedido de venta',
     'description': """
@@ -44,7 +44,8 @@ Qué hace
 * Avisa a quien factura cuando se confecciona un remito: le crea una actividad
   pendiente con vencimiento según el plazo, y la cierra sola cuando la factura se
   postea. El destinatario se elige en la ficha de la compañía y nace vacío: sin él
-  no se avisa a nadie. A los clientes con HES no se les avisa.
+  no se avisa a nadie. El aviso es genérico: a los clientes con HES también se les
+  crea, y queda pendiente hasta que manden el código.
 * Marca en la ficha del cliente si exige HES para facturar: el código de conformidad
   que algunos clientes emiten al recibir la mercadería y sin el cual rechazan la
   factura. A esos clientes no se les reclama el plazo de facturación, porque el

@@ -25,7 +25,8 @@
                         Quien figure en «Avisar a» recibe una actividad pendiente cada
                         vez que se confecciona un remito, con vencimiento según el
                         plazo. Si está vacío no se avisa a nadie. A los clientes que
-                        exigen HES no se les avisa.
+                        exigen HES también se les avisa, pero su aviso queda
+                        pendiente hasta que manden el código.
                     </p>
                     <p class="text-muted">
                         Los días se cuentan con el calendario laboral de la compañía.
