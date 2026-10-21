@@ -329,19 +329,26 @@ class StockPicking(models.Model):
                        fecha=dia.strftime("%d/%m/%Y")),
             )
 
-    def action_guvens_generar_avisos_pendientes(self):
-        """Genera el aviso de los remitos que ya estaban pendientes de facturar.
+    def action_guvens_generar_avisos_pendientes(self, dias_max=7):
+        """Genera el aviso de los remitos pendientes CONFECCIONADOS HACE POCO.
 
         El aviso se crea al cargar el número del talonario, así que al activar la
-        función los remitos anteriores quedan sin él — y son justamente los que
-        llevan más tiempo esperando. Esto los pone al día.
+        función los remitos anteriores quedan sin él. Pero no se avisan todos: uno
+        de hace cincuenta días ya tiene el plazo vencido hace rato y avisarlo no
+        cambia nada operativo, sólo llena la bandeja. Y una bandeja llena de cosas
+        viejas es una bandeja que se deja de mirar, que es la forma más segura de
+        que el aviso no sirva para nada.
 
-        Es una acción explícita y no algo automático: crear decenas de avisos de
-        golpe en la bandeja de alguien es una decisión, no un efecto secundario.
+        `dias_max` son días corridos hacia atrás desde hoy.
+
+        Es una acción explícita y no algo automático: crear avisos de golpe en la
+        bandeja de alguien es una decisión, no un efecto secundario del despliegue.
         Se puede correr las veces que haga falta, porque no duplica.
         """
+        corte = fields.Datetime.now() - timedelta(days=dias_max)
         pendientes = self.search([
             ("guvens_plazo_estado", "=", "pendiente"),
+            ("guvens_remito_fecha", ">=", fields.Datetime.to_string(corte)),
             ("company_id", "in", self.env.companies.ids),
         ])
         antes = len(pendientes._guvens_actividades_de_aviso())
