@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 
 from odoo.tests import TransactionCase, tagged
 
@@ -104,3 +104,103 @@ class TestPlazoFacturacion(TransactionCase):
         remito = self._remito("9002-00000001")
         self.assertEqual(remito.guvens_plazo_estado, "pendiente")
         self.assertEqual(remito.guvens_dias_a_factura, 0)
+
+
+@tagged("post_install", "-at_install")
+class TestFeriados(TransactionCase):
+    """Los feriados: qué día es feriado, y que el indicador se entere.
+
+    Los dos defectos que cubre este bloque se midieron en vivo en testing el
+    21/10/2026, antes de cargarle los feriados reales al calendario: un feriado
+    cargado como día local completo bajaba un remito de 4 días hábiles a 2, y al
+    borrarlo el remito se quedaba con los días que había calculado con él.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.cliente = cls.env["res.partner"].create({"name": "Cliente de feriados"})
+        cls.tipo = cls.env["stock.picking.type"].search([
+            ("code", "=", "outgoing"),
+            ("company_id", "=", cls.env.company.id),
+        ], limit=1)
+
+    def _remito(self, numero=False):
+        vals = {
+            "partner_id": self.cliente.id,
+            "picking_type_id": self.tipo.id,
+            "location_id": self.tipo.default_location_src_id.id,
+            "location_dest_id": self.tipo.default_location_dest_id.id,
+        }
+        if numero:
+            vals["guvens_remito_number"] = numero
+        return self.env["stock.picking"].create(vals)
+
+    def _feriado(self, calendario, dia):
+        """Un feriado como lo carga la pantalla de Odoo: el día local completo.
+
+        En hora de acá son las 00:00 y las 23:59 del mismo día; guardado en UTC, el
+        extremo de arriba cae en el día siguiente.
+        """
+        return self.env["resource.calendar.leaves"].create({
+            "name": f"Feriado de prueba {dia}",
+            "calendar_id": calendario.id,
+            "date_from": datetime.combine(dia, time(3, 0)),
+            "date_to": datetime.combine(dia + timedelta(days=1), time(2, 59)),
+        })
+
+    def test_el_feriado_resta_un_solo_dia(self):
+        """Lo que fallaba: el día siguiente dejaba de contar sin estar marcado."""
+        remito = self._remito()
+        calendario = remito.company_id.resource_calendar_id
+        if not calendario:
+            self.skipTest("La compañía no tiene calendario laboral")
+        self.assertEqual(remito._guvens_dias_habiles(VIERNES, VIERNES_SIGUIENTE), 5)
+        self._feriado(calendario, LUNES)
+        remito.invalidate_recordset()
+        self.assertEqual(
+            remito._guvens_dias_habiles(VIERNES, VIERNES_SIGUIENTE), 4,
+            "El feriado del lunes tiene que restar un día, no dos",
+        )
+        self.assertEqual(
+            remito._guvens_dias_habiles(MARTES, VIERNES_SIGUIENTE), 3,
+            "El martes siguiente al feriado siguió siendo hábil",
+        )
+
+    def test_un_feriado_cargado_en_utc_tambien_resta_uno(self):
+        """Al revés: cargado de 00:00 a 23:59 UTC, el día local anterior no se toca."""
+        remito = self._remito()
+        calendario = remito.company_id.resource_calendar_id
+        if not calendario:
+            self.skipTest("La compañía no tiene calendario laboral")
+        self.env["resource.calendar.leaves"].create({
+            "name": "Feriado cargado por script",
+            "calendar_id": calendario.id,
+            "date_from": datetime.combine(LUNES, time(0, 0)),
+            "date_to": datetime.combine(LUNES, time(23, 59)),
+        })
+        remito.invalidate_recordset()
+        self.assertEqual(remito._guvens_dias_habiles(VIERNES, VIERNES_SIGUIENTE), 4)
+
+    def test_cargar_un_feriado_recalcula_los_remitos(self):
+        """El indicador tiene que enterarse: los feriados no están en el depends."""
+        remito = self._remito(numero="0002-00088001")
+        calendario = remito.company_id.resource_calendar_id
+        if not calendario:
+            self.skipTest("La compañía no tiene calendario laboral")
+        self.assertTrue(remito.guvens_remito_fecha)
+        ausencia = self._feriado(calendario, LUNES)
+        # El recálculo se dispara desde el create de la ausencia: lo que se comprueba
+        # es que los remitos con sello quedaron marcados para recomputar.
+        self.assertIn(remito, ausencia._guvens_remitos_a_recalcular())
+
+    def test_borrar_un_feriado_tambien_recalcula(self):
+        remito = self._remito(numero="0002-00088002")
+        calendario = remito.company_id.resource_calendar_id
+        if not calendario:
+            self.skipTest("La compañía no tiene calendario laboral")
+        ausencia = self._feriado(calendario, LUNES)
+        self.assertIn(remito, ausencia._guvens_remitos_a_recalcular())
+        ausencia.unlink()
+        remito.invalidate_recordset()
+        self.assertEqual(remito._guvens_dias_habiles(VIERNES, VIERNES_SIGUIENTE), 5)

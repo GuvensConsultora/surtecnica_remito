@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 import pytz
 
@@ -149,10 +149,22 @@ class StockPicking(models.Model):
     def _guvens_feriados(self, calendario, desde, hasta):
         """Fechas no laborables cargadas en el calendario, como conjunto de dates.
 
-        Hoy el calendario de Sur Técnica no tiene ninguna cargada, así que los
-        feriados cuentan como hábiles. No se precargan por código: cambian cada año
-        y por decreto, y Odoo ya tiene la pantalla donde se cargan. En cuanto
-        alguien las cargue ahí, este cálculo las toma solo.
+        No se precargan por código: cambian cada año y por decreto, y Odoo ya tiene
+        la pantalla donde se cargan. En cuanto alguien las cargue ahí, este cálculo
+        las toma solo.
+
+        El día se decide por el MEDIODÍA LOCAL, no por la fecha del Datetime en UTC.
+        Es lo que hace la diferencia entre contar bien y restar un día de más: cuando
+        alguien carga el feriado por la pantalla de Odoo, pone «09/11 00:00 a 09/11
+        23:59» en hora de acá, y eso se guarda como 09/11 03:00 → 10/11 02:59 UTC.
+        Leer la fecha de esos dos extremos da los días 9 **y 10**, así que el 10
+        dejaba de contar sin que nadie lo hubiera marcado. Medido en testing el
+        21/10/2026: un feriado de prueba el martes 13/10 bajó un remito de 4 días
+        hábiles a 2.
+
+        Con el mediodía, el único día que cae dentro del intervalo es el 9 — y
+        también funciona al revés, para un feriado cargado por script de 00:00 a
+        23:59 UTC, donde el extremo inferior cae en el día local anterior.
         """
         if not calendario:
             return set()
@@ -161,14 +173,23 @@ class StockPicking(models.Model):
             ("resource_id", "=", False),
             ("date_from", "<=", fields.Datetime.to_string(
                 fields.Datetime.to_datetime(hasta) + timedelta(days=1))),
-            ("date_to", ">=", fields.Datetime.to_string(fields.Datetime.to_datetime(desde))),
+            ("date_to", ">=", fields.Datetime.to_string(
+                fields.Datetime.to_datetime(desde) - timedelta(days=1))),
         ])
+        if not ausencias:
+            return set()
+        zona = self._guvens_tz()
         fechas = set()
         for ausencia in ausencias:
-            dia = ausencia.date_from.date()
-            fin = ausencia.date_to.date()
-            while dia <= fin and dia <= hasta:
-                fechas.add(dia)
+            primero = max(self._guvens_fecha_local(ausencia.date_from), desde)
+            ultimo = min(self._guvens_fecha_local(ausencia.date_to), hasta)
+            dia = primero
+            while dia <= ultimo:
+                mediodia = zona.localize(
+                    datetime.combine(dia, time(12, 0))
+                ).astimezone(pytz.UTC).replace(tzinfo=None)
+                if ausencia.date_from <= mediodia <= ausencia.date_to:
+                    fechas.add(dia)
                 dia += timedelta(days=1)
         return fechas
 
