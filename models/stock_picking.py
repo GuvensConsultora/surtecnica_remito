@@ -321,11 +321,33 @@ class StockPicking(models.Model):
                 "surtecnica_remito.activity_facturar_remito",
                 date_deadline=vence,
                 user_id=destinatario.id,
-                note=_("Remito %(numero)s de %(cliente)s. Confeccionado el %(fecha)s.",
+                note=_("Remito %(numero)s de %(cliente)s — confeccionado el %(fecha)s",
                        numero=picking.guvens_remito_number or picking.name,
-                       cliente=picking.partner_id.display_name or "-",
+                       # sin punto final: muchas razones sociales ya terminan en
+                       # uno («4 L S.A.») y quedaba «S.A..»
+                       cliente=(picking.partner_id.display_name or "-").rstrip("."),
                        fecha=dia.strftime("%d/%m/%Y")),
             )
+
+    def action_guvens_generar_avisos_pendientes(self):
+        """Genera el aviso de los remitos que ya estaban pendientes de facturar.
+
+        El aviso se crea al cargar el número del talonario, así que al activar la
+        función los remitos anteriores quedan sin él — y son justamente los que
+        llevan más tiempo esperando. Esto los pone al día.
+
+        Es una acción explícita y no algo automático: crear decenas de avisos de
+        golpe en la bandeja de alguien es una decisión, no un efecto secundario.
+        Se puede correr las veces que haga falta, porque no duplica.
+        """
+        pendientes = self.search([
+            ("guvens_plazo_estado", "=", "pendiente"),
+            ("company_id", "in", self.env.companies.ids),
+        ])
+        antes = len(pendientes._guvens_actividades_de_aviso())
+        pendientes._guvens_crear_aviso_facturar()
+        creados = len(pendientes._guvens_actividades_de_aviso()) - antes
+        return creados
 
     def _guvens_cerrar_aviso_facturar(self):
         """Cierra el aviso cuando el remito ya tiene factura.
