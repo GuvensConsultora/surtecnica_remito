@@ -1,6 +1,6 @@
 {
     'name': 'Surtecnica - Remito desde el pedido de venta',
-    'version': '17.0.1.17.1',
+    'version': '17.0.1.18.0',
     'category': 'Inventory/Inventory',
     'summary': 'Imprime el remito con el formato del preimpreso, tomando los datos del pedido de venta',
     'description': """
@@ -59,6 +59,19 @@ Qué hace
   postea. El destinatario se elige en la ficha de la compañía y nace vacío: sin él
   no se avisa a nadie. El aviso es genérico: a los remitos que esperan HES también se
   les crea, y queda pendiente hasta que llegue el código.
+* Valoriza lo entregado que todavia no se facturo y lo muestra por cliente. Es el
+  saldo que hoy no esta en ninguna cuenta corriente: si la entrega no lleva
+  comprobante no hay asiento, y el dato vive solo en el pedido. Se valoriza el
+  remito renglon por renglon --cantidad entregada por el precio de su linea, con
+  descuento y sin impuestos-- y no el pedido entero, porque un pedido con varias
+  entregas se contaria una vez por cada remito. Van dos columnas de valor: la de la
+  moneda del pedido, que no se totaliza porque hay pedidos en dolares y en pesos
+  mezclados, y la convertida a la moneda de la compania al tipo de cambio del dia
+  del remito, que es la que se suma. Un renglon sin linea de pedido detras no tiene
+  precio de donde salir: no suma y marca el remito, en vez de estimarlo. Incluye
+  los remitos marcados como "no se factura", que son justamente los que nunca van a
+  tener comprobante. No registra nada: es lectura. Menu: Inventario > Operaciones >
+  Entregado sin facturar.
 * Trae una pantalla para cargar de corrido la lista de clientes que exigen HES, con
   la lista editable en línea y sin poder crear ni borrar contactos: marcarlos uno por
   uno desde su ficha eran tantas fichas como clientes. Menú: Inventario > Operaciones >

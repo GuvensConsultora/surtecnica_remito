@@ -150,6 +150,60 @@ class StockPicking(models.Model):
              "en la ficha de la compañía.",
     )
 
+    # --- valor entregado y todavía no facturado ---
+    guvens_valor_moneda_id = fields.Many2one(
+        "res.currency",
+        string="Moneda del pedido",
+        compute="_compute_guvens_valor_sin_facturar",
+        store=True,
+        help="Moneda en la que se vendió lo que salió con este remito.",
+    )
+    guvens_company_currency_id = fields.Many2one(
+        "res.currency",
+        string="Moneda de la compañía",
+        related="company_id.currency_id",
+        readonly=True,
+        help="Hace falta como moneda del campo en pesos: el albarán no trae ninguna.",
+    )
+    guvens_valor_sin_facturar = fields.Monetary(
+        string="Valor sin facturar",
+        currency_field="guvens_valor_moneda_id",
+        compute="_compute_guvens_valor_sin_facturar",
+        store=True,
+        # Sin agregado a propósito: cada remito puede estar en otra moneda, y el
+        # read_group del servidor sumaría dólares con pesos sin avisar. La columna
+        # que se suma es la de pesos. Mismo criterio que `guvens_dias_a_factura`:
+        # el agregado lo decide el modelo, no la vista.
+        group_operator=False,
+        help="Lo que salió con este remito y todavía no se facturó, en la moneda del "
+             "pedido. Cantidad entregada por el precio de su línea de venta, con el "
+             "descuento aplicado y sin impuestos.\n\n"
+             "Se valoriza el remito y no el pedido porque un pedido puede tener varias "
+             "entregas: tomar el «por facturar» del pedido lo contaría una vez por cada "
+             "remito. Medido en testing el 21/10/2026, el pedido S06291 tiene 3.",
+    )
+    guvens_valor_sin_facturar_ars = fields.Monetary(
+        string="Valor sin facturar en pesos",
+        currency_field="guvens_company_currency_id",
+        compute="_compute_guvens_valor_sin_facturar",
+        store=True,
+        help="El mismo valor convertido a la moneda de la compañía, para poder sumarlo "
+             "por cliente: hay pedidos en dólares y en pesos mezclados, así que una "
+             "sola columna en moneda de origen no se puede totalizar.\n\n"
+             "Se convierte al día en que se confeccionó el remito, no al de hoy. Así el "
+             "número es histórico, no se mueve solo y no hace falta un proceso que lo "
+             "refresque.",
+    )
+    guvens_valor_incompleto = fields.Boolean(
+        string="Valor incompleto",
+        compute="_compute_guvens_valor_sin_facturar",
+        store=True,
+        help="Marcado cuando algún movimiento del remito no tiene línea de pedido "
+             "detrás: no hay precio de dónde sacarlo, así que ese renglón no suma. Se "
+             "marca el remito en vez de estimarlo, porque un valor inventado es peor "
+             "que un valor faltante.",
+    )
+
     # --- bloque de observaciones que hoy se escribe en el impreso ---
     guvens_remito_oc = fields.Char(
         string="OC del cliente",
@@ -433,6 +487,90 @@ class StockPicking(models.Model):
             desde = picking._guvens_fecha_local(picking.guvens_remito_fecha)
             picking.guvens_dias_sin_facturar = picking._guvens_dias_habiles(
                 desde, fields.Date.context_today(picking))
+
+    def _guvens_precio_unitario(self, linea):
+        """Precio unitario de una línea de pedido, con descuento y sin impuestos.
+
+        `price_reduce_taxexcl` no es del core de Odoo 17 —lo agregan los módulos de la
+        localización—, así que se usa si está y si no se reconstruye del precio y el
+        descuento. Medido en testing el 21/10/2026: el campo existe y está almacenado.
+        """
+        if "price_reduce_taxexcl" in linea._fields:
+            return linea.price_reduce_taxexcl
+        return linea.price_unit * (1.0 - (linea.discount or 0.0) / 100.0)
+
+    def _guvens_convertir(self, importe, desde, hasta, fecha):
+        """Pasa un importe de una moneda a otra al tipo de cambio de `fecha`."""
+        if not importe or not desde or not hasta or desde == hasta:
+            return importe
+        return desde._convert(importe, hasta, self.company_id, fecha)
+
+    @api.depends(
+        "guvens_plazo_estado",
+        "guvens_remito_fecha",
+        "company_id",
+        "move_ids.state",
+        "move_ids.quantity",
+        "move_ids.product_uom",
+        "move_ids.sale_line_id",
+        "move_ids.sale_line_id.price_unit",
+        "move_ids.sale_line_id.discount",
+        "move_ids.sale_line_id.product_uom",
+        "move_ids.sale_line_id.currency_id",
+    )
+    def _compute_guvens_valor_sin_facturar(self):
+        """Cuánto vale lo que salió con este remito y todavía no tiene factura.
+
+        Es el saldo que la empresa necesita seguir cuando la entrega no se factura
+        —porque no lleva comprobante, porque el cliente no retiró o porque falta la
+        HES— y que hoy no está en ninguna cuenta corriente: no hay asiento, el dato
+        vive en el pedido.
+
+        Sólo se valorizan los remitos sin factura. Los demás estados ya la tienen, o
+        el apareo es ambiguo y el valor sería tan dudoso como el apareo.
+
+        La cantidad del movimiento viene en SU unidad de medida y el precio es por la
+        unidad de la línea de venta. Convertir no es un detalle: un precio por metro
+        aplicado a una cantidad en centímetros da un valor cien veces más grande.
+        """
+        for picking in self:
+            picking.guvens_valor_moneda_id = False
+            picking.guvens_valor_sin_facturar = 0.0
+            picking.guvens_valor_sin_facturar_ars = 0.0
+            picking.guvens_valor_incompleto = False
+            if picking.guvens_plazo_estado not in ("pendiente", "no_factura"):
+                continue
+
+            fecha = (picking._guvens_fecha_local(picking.guvens_remito_fecha)
+                     if picking.guvens_remito_fecha
+                     else fields.Date.context_today(picking))
+            moneda = picking.sale_id.currency_id
+            total = 0.0
+            incompleto = False
+
+            for move in picking.move_ids:
+                if move.state == "cancel" or not move.quantity:
+                    continue
+                linea = move.sale_line_id
+                if not linea:
+                    incompleto = True
+                    continue
+                if move.product_uom and linea.product_uom:
+                    cantidad = move.product_uom._compute_quantity(
+                        move.quantity, linea.product_uom)
+                else:
+                    cantidad = move.quantity
+                importe = cantidad * picking._guvens_precio_unitario(linea)
+                if not moneda:
+                    moneda = linea.currency_id
+                total += picking._guvens_convertir(
+                    importe, linea.currency_id, moneda, fecha)
+
+            picking.guvens_valor_moneda_id = moneda
+            picking.guvens_valor_sin_facturar = total
+            picking.guvens_valor_sin_facturar_ars = picking._guvens_convertir(
+                total, moneda, picking.company_id.currency_id, fecha)
+            picking.guvens_valor_incompleto = incompleto
 
     @api.model
     def _guvens_cron_dias_sin_facturar(self):

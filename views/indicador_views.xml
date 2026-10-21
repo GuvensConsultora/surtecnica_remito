@@ -18,6 +18,8 @@
                 <field name="guvens_dias_sin_facturar" string="Esperando" avg="Promedio"
                        optional="show"/>
                 <field name="guvens_motivo_no_facturado" string="Motivo" optional="show"/>
+                <field name="guvens_valor_sin_facturar_ars" string="Valor sin facturar"
+                       sum="Total" optional="hide"/>
                 <field name="guvens_remito_requiere_hes" string="HES" optional="show"/>
                 <field name="guvens_plazo_estado" string="Estado"/>
                 <field name="company_id" groups="base.group_multi_company" optional="hide"/>
@@ -87,6 +89,15 @@
                 <filter name="sin_hes" string="Sin HES"
                         domain="[('guvens_remito_requiere_hes', '=', False)]"/>
                 <separator/>
+                <filter name="sin_factura_aun" string="Sin facturar (todos)"
+                        domain="[('guvens_plazo_estado', 'in', ['pendiente', 'no_factura'])]"
+                        help="Lo entregado que todavía no tiene factura, incluidos los
+                              que no la van a tener."/>
+                <filter name="valor_incompleto" string="Valor incompleto"
+                        domain="[('guvens_valor_incompleto', '=', True)]"
+                        help="Remitos con algún renglón sin línea de pedido detrás: no
+                              hay precio de dónde sacarlo y ese renglón no suma."/>
+                <separator/>
                 <filter name="revisar" string="Para revisar a mano"
                         domain="[('guvens_plazo_estado', 'in', ['indeterminado', 'previo'])]"
                         help="Pedidos con varias entregas o varias facturas, y los que
@@ -101,6 +112,8 @@
                             context="{'group_by': 'guvens_remito_requiere_hes'}"/>
                     <filter name="g_motivo" string="Motivo de que no esté facturado"
                             context="{'group_by': 'guvens_motivo_no_facturado'}"/>
+                    <filter name="g_moneda" string="Moneda del pedido"
+                            context="{'group_by': 'guvens_valor_moneda_id'}"/>
                     <filter name="g_mes" string="Mes del remito"
                             context="{'group_by': 'guvens_remito_fecha:month'}"/>
                     <filter name="g_compania" string="Compañía"
@@ -155,5 +168,89 @@
               parent="stock.menu_stock_warehouse_mgmt"
               action="action_plazo_facturacion"
               sequence="8"/>
+
+    <!-- ============ ENTREGADO Y NO FACTURADO ============ -->
+    <!-- El saldo que hoy no está en ninguna cuenta corriente: la entrega salió y no
+         hay factura, así que no hay asiento. El dato vive en el pedido y acá se
+         muestra por cliente. Este informe no registra nada: es lectura. -->
+    <record id="view_picking_tree_valor" model="ir.ui.view">
+        <field name="name">stock.picking.tree.valor.sin.facturar</field>
+        <field name="model">stock.picking</field>
+        <field name="arch" type="xml">
+            <tree string="Entregado sin facturar" create="false"
+                  default_order="guvens_valor_sin_facturar_ars desc">
+                <field name="name" string="Remito"/>
+                <field name="guvens_remito_number" string="Nº talonario"/>
+                <field name="partner_id" string="Cliente"/>
+                <field name="guvens_remito_fecha" string="Confeccionado"/>
+                <field name="guvens_dias_sin_facturar" string="Esperando" avg="Promedio"/>
+                <field name="guvens_motivo_no_facturado" string="Motivo"/>
+                <!-- Las dos columnas de valor, y sólo una se totaliza. La de origen
+                     está en la moneda de cada pedido: sumarla mezclaría dólares con
+                     pesos. -->
+                <field name="guvens_valor_sin_facturar" string="Valor (moneda del pedido)"/>
+                <field name="guvens_valor_moneda_id" string="Moneda" optional="show"/>
+                <field name="guvens_valor_sin_facturar_ars" string="Valor en pesos"
+                       sum="Total"/>
+                <field name="guvens_valor_incompleto" string="Valor incompleto"
+                       optional="show"/>
+                <field name="guvens_plazo_estado" string="Estado" optional="hide"/>
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_picking_pivot_valor" model="ir.ui.view">
+        <field name="name">stock.picking.pivot.valor.sin.facturar</field>
+        <field name="model">stock.picking</field>
+        <field name="arch" type="xml">
+            <pivot string="Entregado sin facturar" sample="0">
+                <!-- Cliente contra motivo: separa lo que está demorado de lo que no
+                     lleva comprobante, que son dos saldos distintos aunque sumen. -->
+                <field name="partner_id" type="row"/>
+                <field name="guvens_motivo_no_facturado" type="col"/>
+                <field name="guvens_valor_sin_facturar_ars" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="action_valor_sin_facturar" model="ir.actions.act_window">
+        <field name="name">Entregado sin facturar</field>
+        <field name="res_model">stock.picking</field>
+        <field name="view_mode">tree,pivot,form</field>
+        <field name="domain">[('guvens_plazo_estado', 'in', ['pendiente', 'no_factura'])]</field>
+        <field name="search_view_id" ref="view_picking_search_plazo"/>
+        <field name="context">{'search_default_g_cliente': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No hay entregas sin facturar
+            </p>
+            <p>
+                Acá aparece lo que salió con remito y todavía no tiene factura,
+                valorizado con el precio de su pedido y agrupado por cliente.
+                Incluye los remitos marcados como «no se factura»: son los que no
+                van a tener comprobante y cuyo saldo igual hay que seguir.
+            </p>
+        </field>
+    </record>
+
+    <record id="action_valor_sin_facturar_tree" model="ir.actions.act_window.view">
+        <field name="sequence">1</field>
+        <field name="view_mode">tree</field>
+        <field name="view_id" ref="view_picking_tree_valor"/>
+        <field name="act_window_id" ref="action_valor_sin_facturar"/>
+    </record>
+    <record id="action_valor_sin_facturar_pivot" model="ir.actions.act_window.view">
+        <field name="sequence">2</field>
+        <field name="view_mode">pivot</field>
+        <field name="view_id" ref="view_picking_pivot_valor"/>
+        <field name="act_window_id" ref="action_valor_sin_facturar"/>
+    </record>
+
+    <menuitem id="menu_valor_sin_facturar"
+              name="Entregado sin facturar"
+              parent="stock.menu_stock_warehouse_mgmt"
+              action="action_valor_sin_facturar"
+              sequence="9"/>
 
 </odoo>
