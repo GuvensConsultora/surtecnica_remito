@@ -130,6 +130,30 @@ class TestValorSinFacturar(TransactionCase):
         self.assertEqual(remito.guvens_plazo_estado, "no_factura")
         self.assertEqual(remito.guvens_valor_sin_facturar, 1000.0)
 
+    def test_sin_cantidad_cargada_se_usa_la_demanda(self):
+        """El remito se imprime sin validar el albarán: ahí `quantity` está en cero.
+
+        Es el caso normal en Sur Técnica, no la excepción. Medido en testing el
+        21/10/2026, 6 de los 26 remitos sin facturar con una sola entrega quedaban en
+        $0 por esto —uno de ellos de $342.831,31— aunque la mercadería había salido.
+        """
+        _pedido, remito = self._pedido(cantidad=10.0, precio=100.0)
+        for move in remito.move_ids:
+            move.quantity = 0.0
+            self.assertEqual(move.product_uom_qty, 10.0)
+        self.assertEqual(remito.guvens_valor_sin_facturar, 1000.0)
+
+    def test_el_descuento_no_arrastra_el_redondeo_del_unitario(self):
+        """60 a 18,35 con 18% son 902,82, no 903,00.
+
+        El unitario con descuento es 15,047: redondeado a 15,05 y multiplicado por 60
+        da 18 centavos de más. Por eso el precio sale del subtotal y no del unitario.
+        Es el caso real del remito WH/OUT/02804.
+        """
+        pedido, remito = self._pedido(cantidad=60.0, precio=18.35, descuento=18.0)
+        self.assertEqual(remito.guvens_valor_sin_facturar, pedido.amount_untaxed)
+        self.assertNotEqual(remito.guvens_valor_sin_facturar, 903.00)
+
     # ---------------- control contra el pedido ----------------
     def test_con_un_solo_remito_coincide_con_el_neto_del_pedido(self):
         """La prueba de que el cálculo está bien, con la comparación correcta.

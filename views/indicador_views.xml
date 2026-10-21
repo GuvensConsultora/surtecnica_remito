@@ -218,7 +218,10 @@
         <field name="name">Entregado sin facturar</field>
         <field name="res_model">stock.picking</field>
         <field name="view_mode">tree,pivot,form</field>
-        <field name="domain">[('guvens_plazo_estado', 'in', ['pendiente', 'no_factura'])]</field>
+        <!-- Los cancelados quedan afuera: un remito anulado no es un saldo a cobrar.
+             Medido en testing el 21/10/2026, WH/OUT/02388 aparecía en la lista. -->
+        <field name="domain">[('guvens_plazo_estado', 'in', ['pendiente', 'no_factura']),
+                              ('state', '!=', 'cancel')]</field>
         <field name="search_view_id" ref="view_picking_search_plazo"/>
         <field name="context">{'search_default_g_cliente': 1}</field>
         <field name="help" type="html">

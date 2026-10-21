@@ -489,12 +489,21 @@ class StockPicking(models.Model):
                 desde, fields.Date.context_today(picking))
 
     def _guvens_precio_unitario(self, linea):
-        """Precio unitario de una línea de pedido, con descuento y sin impuestos.
+        """Precio unitario neto de una línea de pedido, sin impuestos.
 
-        `price_reduce_taxexcl` no es del core de Odoo 17 —lo agregan los módulos de la
-        localización—, así que se usa si está y si no se reconstruye del precio y el
-        descuento. Medido en testing el 21/10/2026: el campo existe y está almacenado.
+        Sale del SUBTOTAL dividido por la cantidad, y no del precio unitario con el
+        descuento aplicado: ese camino redondea el unitario a dos decimales y la
+        diferencia se multiplica por la cantidad. Medido en testing el 21/10/2026,
+        el remito WH/OUT/02804: 60 unidades a 18,35 con 18% de descuento dan 15,047
+        por unidad, que redondeado a 15,05 da 903,00 contra los 902,82 que tiene el
+        pedido. Dividir el subtotal da el número exacto y cierra con `amount_untaxed`.
+
+        El fallback es para la línea sin cantidad, donde no se puede dividir:
+        `price_reduce_taxexcl` no es del core de Odoo 17 —lo agrega la localización—,
+        así que se usa si está y si no se reconstruye del precio y el descuento.
         """
+        if linea.product_uom_qty:
+            return linea.price_subtotal / linea.product_uom_qty
         if "price_reduce_taxexcl" in linea._fields:
             return linea.price_reduce_taxexcl
         return linea.price_unit * (1.0 - (linea.discount or 0.0) / 100.0)
@@ -511,9 +520,12 @@ class StockPicking(models.Model):
         "company_id",
         "move_ids.state",
         "move_ids.quantity",
+        "move_ids.product_uom_qty",
         "move_ids.product_uom",
         "move_ids.sale_line_id",
         "move_ids.sale_line_id.price_unit",
+        "move_ids.sale_line_id.price_subtotal",
+        "move_ids.sale_line_id.product_uom_qty",
         "move_ids.sale_line_id.discount",
         "move_ids.sale_line_id.product_uom",
         "move_ids.sale_line_id.currency_id",
@@ -549,7 +561,14 @@ class StockPicking(models.Model):
             incompleto = False
 
             for move in picking.move_ids:
-                if move.state == "cancel" or not move.quantity:
+                # La cantidad cargada, y si no hay ninguna la demanda: el remito se
+                # imprime sin validar el albarán —es una decisión del operador, no un
+                # paso de este circuito—, así que en la mayoría `quantity` está en
+                # cero y la mercadería igual salió. Medido en testing el 21/10/2026:
+                # 6 de los 26 remitos sin facturar con pedido de una sola entrega
+                # quedaban en $0 por esto, entre ellos uno de $342.831,31.
+                cantidad_move = move.quantity or move.product_uom_qty
+                if move.state == "cancel" or not cantidad_move:
                     continue
                 linea = move.sale_line_id
                 if not linea:
@@ -557,9 +576,9 @@ class StockPicking(models.Model):
                     continue
                 if move.product_uom and linea.product_uom:
                     cantidad = move.product_uom._compute_quantity(
-                        move.quantity, linea.product_uom)
+                        cantidad_move, linea.product_uom)
                 else:
-                    cantidad = move.quantity
+                    cantidad = cantidad_move
                 importe = cantidad * picking._guvens_precio_unitario(linea)
                 if not moneda:
                     moneda = linea.currency_id
