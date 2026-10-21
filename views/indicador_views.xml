@@ -17,6 +17,7 @@
                 <field name="guvens_dias_a_factura" string="Días hábiles" avg="Promedio"/>
                 <field name="guvens_dias_sin_facturar" string="Esperando" avg="Promedio"
                        optional="show"/>
+                <field name="guvens_motivo_no_facturado" string="Motivo" optional="show"/>
                 <field name="guvens_remito_requiere_hes" string="HES" optional="show"/>
                 <field name="guvens_plazo_estado" string="Estado"/>
                 <field name="company_id" groups="base.group_multi_company" optional="hide"/>
@@ -69,6 +70,10 @@
                 <filter name="pendiente" string="Pendientes de facturar"
                         domain="[('guvens_plazo_estado', '=', 'pendiente')]"/>
                 <separator/>
+                <filter name="sin_motivo" string="Sin motivo cargado"
+                        domain="[('guvens_plazo_estado', '=', 'pendiente'),
+                                 ('guvens_motivo_no_facturado', '=', False)]"
+                        help="Remitos sin facturar de los que todavía no sabemos por qué."/>
                 <filter name="esperando" string="Esperando hace más de 5 días"
                         domain="[('guvens_dias_sin_facturar', '>', 5)]"
                         help="Remitos sin factura, ordenados por lo que llevan esperando.
@@ -94,6 +99,8 @@
                             context="{'group_by': 'partner_id'}"/>
                     <filter name="g_hes" string="HES / autorización"
                             context="{'group_by': 'guvens_remito_requiere_hes'}"/>
+                    <filter name="g_motivo" string="Motivo de que no esté facturado"
+                            context="{'group_by': 'guvens_motivo_no_facturado'}"/>
                     <filter name="g_mes" string="Mes del remito"
                             context="{'group_by': 'guvens_remito_fecha:month'}"/>
                     <filter name="g_compania" string="Compañía"

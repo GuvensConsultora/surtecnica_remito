@@ -78,6 +78,34 @@ class StockPicking(models.Model):
              "El día del remito no cuenta: un remito del viernes facturado el lunes "
              "lleva un día.",
     )
+    guvens_motivo_no_facturado = fields.Selection(
+        selection=[
+            ("espera_hes", "Espera HES / autorización"),
+            ("no_retiro", "No lo retiraron todavía"),
+            ("sin_factura", "No se factura"),
+            ("otro", "Otro motivo"),
+        ],
+        string="Motivo de que no esté facturado",
+        compute="_compute_guvens_motivo_no_facturado",
+        store=True,
+        readonly=False,
+        copy=False,
+        tracking=True,
+        help="Por qué este remito todavía no tiene factura. Son los cuatro casos que "
+             "distingue la empresa:\n\n"
+             "• «Espera HES / autorización»: viene puesto solo cuando el remito tiene "
+             "el tilde. No hay que cargarlo a mano.\n"
+             "• «No lo retiraron todavía»: el transporte o el cliente no pasaron a "
+             "buscar la mercadería. El remito está hecho pero la entrega no ocurrió.\n"
+             "• «No se factura»: la entrega no lleva comprobante. Deja de acumular "
+             "espera y sale de los promedios, porque no está esperando nada.\n"
+             "• «Otro motivo»: cualquier otra razón; conviene dejarla escrita en las "
+             "observaciones del remito.\n\n"
+             "Sin este dato el ranking de demoras mezcla atrasos con cosas que no lo "
+             "son: medido el 21/10/2026, los dos primeros puestos eran un remito que "
+             "el cliente nunca retiró y uno que no se factura.",
+    )
+
     guvens_dias_sin_facturar = fields.Integer(
         string="Días hábiles sin facturar",
         compute="_compute_guvens_dias_sin_facturar",
@@ -101,6 +129,7 @@ class StockPicking(models.Model):
             ("excedido", "Excedido"),
             ("facturado", "Facturado (sin plazo definido)"),
             ("hes", "Espera HES / autorización"),
+            ("no_factura", "No se factura"),
             ("pendiente", "Pendiente de facturar"),
             ("previo", "Facturada antes del remito"),
             ("indeterminado", "No determinable"),
@@ -113,6 +142,8 @@ class StockPicking(models.Model):
              "cliente emite un código de conformidad al recibir, o tiene que autorizar. "
              "Se les miden los días igual, para poder compararlos, pero no se les "
              "reclama el plazo porque facturar no depende de nosotros.\n\n"
+             "«No se factura» son los que alguien marcó con ese motivo: no están "
+             "esperando nada, así que no acumulan espera ni entran en los promedios.\n\n"
              "«No determinable» es un pedido con varias entregas o varias facturas, "
              "donde no se puede atribuir una factura a un remito sin revisarlo a mano.\n\n"
              "«Facturado (sin plazo definido)» aparece mientras no se cargue el plazo "
@@ -302,6 +333,7 @@ class StockPicking(models.Model):
         "sale_id.invoice_ids.move_type",
         "sale_id.picking_ids.guvens_remito_number",
         "guvens_remito_requiere_hes",
+        "guvens_motivo_no_facturado",
     )
     def _compute_guvens_plazo(self):
         for picking in self:
@@ -318,7 +350,14 @@ class StockPicking(models.Model):
                 pedido = picking.sale_id
                 hay_posteadas = pedido and pedido.invoice_ids.filtered(
                     lambda m: m.move_type == "out_invoice" and m.state == "posted")
-                picking.guvens_plazo_estado = "indeterminado" if hay_posteadas else "pendiente"
+                if hay_posteadas:
+                    picking.guvens_plazo_estado = "indeterminado"
+                elif picking.guvens_motivo_no_facturado == "sin_factura":
+                    # No está esperando: nadie va a facturarlo. Si quedara «pendiente»
+                    # envejecería para siempre y treparía en el ranking de demoras.
+                    picking.guvens_plazo_estado = "no_factura"
+                else:
+                    picking.guvens_plazo_estado = "pendiente"
                 continue
 
             picking.guvens_factura_id = factura
@@ -352,6 +391,30 @@ class StockPicking(models.Model):
                 picking.guvens_plazo_estado = "facturado"
             else:
                 picking.guvens_plazo_estado = "en_plazo" if dias <= plazo else "excedido"
+
+    @api.depends("guvens_remito_requiere_hes")
+    def _compute_guvens_motivo_no_facturado(self):
+        """Propone «espera HES» desde el tilde; lo demás lo marca quien factura.
+
+        Es un compute EDITABLE, igual que el tilde: el sistema sabe cuándo se está
+        esperando una HES —lo dice el tilde—, pero no puede saber si el cliente no
+        pasó a retirar o si esa entrega no lleva comprobante. Eso lo sabe la persona.
+
+        Depende sólo del tilde: al marcarlo o destildarlo el motivo se vuelve a
+        proponer, porque cambió el hecho del que salía. Un motivo cargado a mano
+        sobre un remito cuyo tilde nadie toca se queda como está.
+        """
+        for picking in self:
+            if picking.guvens_remito_requiere_hes:
+                picking.guvens_motivo_no_facturado = "espera_hes"
+            elif picking.guvens_motivo_no_facturado == "espera_hes":
+                # Se destildó: el motivo que había salido del tilde ya no vale.
+                picking.guvens_motivo_no_facturado = False
+            else:
+                # Se reasigna su propio valor a propósito: un compute almacenado tiene
+                # que dejar todos los registros asignados, y acá la rama que no hace
+                # nada es justamente la del motivo que cargó una persona.
+                picking.guvens_motivo_no_facturado = picking.guvens_motivo_no_facturado
 
     @api.depends("guvens_remito_fecha", "guvens_plazo_estado")
     def _compute_guvens_dias_sin_facturar(self):

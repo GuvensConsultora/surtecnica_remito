@@ -1,6 +1,6 @@
 {
     'name': 'Surtecnica - Remito desde el pedido de venta',
-    'version': '17.0.1.16.0',
+    'version': '17.0.1.17.0',
     'category': 'Inventory/Inventory',
     'summary': 'Imprime el remito con el formato del preimpreso, tomando los datos del pedido de venta',
     'description': """
@@ -44,6 +44,11 @@ Qué hace
   los días pero no se marca a nadie como excedido. Los pedidos con varias entregas
   o varias facturas quedan como «No determinable» en vez de recibir un plazo que no
   se puede atribuir. Menú: Inventario > Operaciones > Plazo de facturación.
+* Registra POR QUÉ un remito todavía no se facturó, con los cuatro casos que
+  distingue la empresa: espera la HES, no lo retiraron, no se factura, u otro. El
+  primero viene puesto del tilde; el resto lo marca quien factura. Sin ese dato el
+  ranking de demoras mezcla atrasos con cosas que no lo son. Un remito marcado «no se
+  factura» deja de acumular espera y sale de los promedios: no está esperando nada.
 * Mide también la espera EN CURSO: los días hábiles que lleva un remito que todavía
   no se facturó. Hace falta junto al otro número, porque el promedio de los remitos
   facturados no ve al cliente que no factura nunca —sus remitos no tienen días que

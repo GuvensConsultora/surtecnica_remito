@@ -264,3 +264,72 @@ class TestDiasSinFacturar(TransactionCase):
         self.assertTrue(cron.active)
         self.assertEqual(cron.interval_type, "days")
         self.assertEqual(cron.interval_number, 1)
+
+
+@tagged("post_install", "-at_install")
+class TestMotivoNoFacturado(TransactionCase):
+    """El motivo: sin él, el ranking de demoras mezcla atrasos con lo que no lo es.
+
+    Medido el 21/10/2026 sobre los remitos reales de testing: los dos primeros
+    puestos del ranking de espera eran un remito que el cliente nunca pasó a retirar
+    y uno que directamente no se factura. Ninguno de los dos es un atraso nuestro ni
+    del cliente en autorizar.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.cliente = cls.env["res.partner"].create({"name": "Cliente motivos"})
+        cls.con_hes = cls.env["res.partner"].create({
+            "name": "Cliente motivos con HES", "guvens_requiere_hes": True})
+        cls.tipo = cls.env["stock.picking.type"].search([
+            ("code", "=", "outgoing"),
+            ("company_id", "=", cls.env.company.id),
+        ], limit=1)
+
+    def _remito(self, numero=False, cliente=None):
+        vals = {
+            "partner_id": (cliente or self.cliente).id,
+            "picking_type_id": self.tipo.id,
+            "location_id": self.tipo.default_location_src_id.id,
+            "location_dest_id": self.tipo.default_location_dest_id.id,
+        }
+        if numero:
+            vals["guvens_remito_number"] = numero
+        return self.env["stock.picking"].create(vals)
+
+    def test_el_tilde_propone_el_motivo(self):
+        self.assertEqual(
+            self._remito(cliente=self.con_hes).guvens_motivo_no_facturado, "espera_hes")
+
+    def test_destildar_saca_el_motivo_propuesto(self):
+        remito = self._remito(cliente=self.con_hes)
+        remito.guvens_remito_requiere_hes = False
+        self.assertFalse(remito.guvens_motivo_no_facturado)
+
+    def test_un_motivo_cargado_a_mano_no_se_pisa(self):
+        """Lo que carga una persona manda sobre lo que propone el sistema."""
+        remito = self._remito(numero="0002-00066001")
+        remito.guvens_motivo_no_facturado = "no_retiro"
+        remito.guvens_remito_requiere_hes = False   # vuelve a disparar el compute
+        self.assertEqual(remito.guvens_motivo_no_facturado, "no_retiro")
+
+    def test_sin_factura_sale_de_pendiente_y_deja_de_esperar(self):
+        """Si nadie va a facturarlo, no está esperando: no puede seguir envejeciendo."""
+        remito = self._remito(numero="0002-00066002")
+        self.assertEqual(remito.guvens_plazo_estado, "pendiente")
+        remito.guvens_remito_fecha = datetime.now() - timedelta(days=30)
+        remito.invalidate_recordset()
+        self.assertGreater(remito.guvens_dias_sin_facturar, 0)
+        remito.guvens_motivo_no_facturado = "sin_factura"
+        self.assertEqual(remito.guvens_plazo_estado, "no_factura")
+        self.assertEqual(remito.guvens_dias_sin_facturar, 0)
+
+    def test_no_retiro_sigue_contando_la_espera(self):
+        """No es lo mismo que «no se factura»: acá la factura todavía va a existir."""
+        remito = self._remito(numero="0002-00066003")
+        remito.guvens_remito_fecha = datetime.now() - timedelta(days=30)
+        remito.guvens_motivo_no_facturado = "no_retiro"
+        remito.invalidate_recordset()
+        self.assertEqual(remito.guvens_plazo_estado, "pendiente")
+        self.assertGreater(remito.guvens_dias_sin_facturar, 0)
