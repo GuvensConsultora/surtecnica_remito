@@ -35,4 +35,90 @@
         </field>
     </record>
 
+
+    <!-- ============ LISTA ESTANDAR DE CONTACTOS ============ -->
+    <!-- Apagada por defecto (`optional="hide"`): la columna sirve cuando alguien está
+         mirando quién exige HES, y estorba en el uso normal de la lista de contactos. -->
+    <record id="view_partner_tree_remito_hes" model="ir.ui.view">
+        <field name="name">res.partner.tree.remito.hes</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='email']" position="after">
+                <field name="guvens_requiere_hes" string="Exige HES" optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ============ LISTA PARA CARGAR LA LISTA DE UNA ============ -->
+    <!--
+        La ficha del cliente ya tiene el campo, pero cargar treinta clientes por ahí
+        son treinta fichas que abrir y cerrar. Esta lista es editable en línea: se
+        busca el cliente, se tilda y se sigue.
+
+        No deja crear ni borrar contactos (`create="0" delete="0"`): es una pantalla
+        para marcar una condición de clientes que ya existen, y un alta de contacto
+        hecha de paso acá sería un duplicado esperando a pasar.
+    -->
+    <record id="view_partner_tree_hes" model="ir.ui.view">
+        <field name="name">res.partner.tree.hes</field>
+        <field name="model">res.partner</field>
+        <field name="arch" type="xml">
+            <tree string="Clientes que exigen HES" editable="bottom"
+                  create="0" delete="0" default_order="display_name">
+                <field name="display_name" string="Cliente" readonly="1"/>
+                <field name="vat" string="CUIT" readonly="1" optional="show"/>
+                <field name="guvens_requiere_hes" string="Exige HES / autorización"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_partner_search_hes" model="ir.ui.view">
+        <field name="name">res.partner.search.hes</field>
+        <field name="model">res.partner</field>
+        <field name="arch" type="xml">
+            <search string="Clientes que exigen HES">
+                <field name="display_name" string="Cliente"
+                       filter_domain="['|', ('display_name', 'ilike', self), ('vat', 'ilike', self)]"/>
+                <filter name="marcados" string="Ya marcados"
+                        domain="[('guvens_requiere_hes', '=', True)]"/>
+                <filter name="sin_marcar" string="Sin marcar"
+                        domain="[('guvens_requiere_hes', '=', False)]"/>
+                <group expand="0" string="Agrupar por">
+                    <filter name="g_hes" string="Exige HES / autorización"
+                            context="{'group_by': 'guvens_requiere_hes'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_clientes_hes" model="ir.actions.act_window">
+        <field name="name">Clientes que exigen HES</field>
+        <field name="res_model">res.partner</field>
+        <field name="view_mode">tree,form</field>
+        <field name="view_id" ref="view_partner_tree_hes"/>
+        <field name="search_view_id" ref="view_partner_search_hes"/>
+        <!-- Clientes, más los ya marcados aunque todavía no tengan ventas: si alguien
+             marcó a uno, tiene que poder volver a encontrarlo acá para desmarcarlo. -->
+        <field name="domain">['|', ('customer_rank', '>', 0), ('guvens_requiere_hes', '=', True)]</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Todavía no hay clientes cargados
+            </p>
+            <p>
+                Marcá acá los clientes que emiten un código de conformidad (HES) o que
+                tienen que autorizar antes de que se les pueda facturar. Sus remitos
+                van a nacer con el tilde puesto, y en cada remito se puede destildar
+                cuando esa entrega puntual no lo lleve.
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_clientes_hes"
+              name="Clientes que exigen HES"
+              parent="stock.menu_stock_warehouse_mgmt"
+              action="action_clientes_hes"
+              groups="account.group_account_invoice"
+              sequence="9"/>
+
 </odoo>

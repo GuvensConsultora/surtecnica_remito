@@ -1,6 +1,6 @@
 {
     'name': 'Surtecnica - Remito desde el pedido de venta',
-    'version': '17.0.1.13.0',
+    'version': '17.0.1.14.0',
     'category': 'Inventory/Inventory',
     'summary': 'Imprime el remito con el formato del preimpreso, tomando los datos del pedido de venta',
     'description': """
@@ -46,6 +46,10 @@ Qué hace
   postea. El destinatario se elige en la ficha de la compañía y nace vacío: sin él
   no se avisa a nadie. El aviso es genérico: a los remitos que esperan HES también se
   les crea, y queda pendiente hasta que llegue el código.
+* Trae una pantalla para cargar de corrido la lista de clientes que exigen HES, con
+  la lista editable en línea y sin poder crear ni borrar contactos: marcarlos uno por
+  uno desde su ficha eran tantas fichas como clientes. Menú: Inventario > Operaciones >
+  Clientes que exigen HES, visible para quien tiene Facturación.
 * Marca en cada remito si espera HES o autorización del cliente para poder
   facturarlo. El tilde nace marcado para los clientes que figuran en la lista de los
   que lo exigen —se carga en su ficha, cliente por cliente— y se destilda en el

@@ -1,4 +1,5 @@
 from odoo.tests import TransactionCase, tagged
+from odoo.tools.safe_eval import safe_eval
 
 
 @tagged("post_install", "-at_install")
@@ -170,3 +171,43 @@ class TestTildeHesDelRemito(TransactionCase):
             ("res_model", "=", "stock.picking"), ("res_id", "=", remito.id)])
         self.assertEqual(len(aviso), 1)
         self.assertNotIn("HES", aviso.note or "")
+
+
+@tagged("post_install", "-at_install")
+class TestPantallaClientesHes(TransactionCase):
+    """La pantalla para cargar la lista: lo que se protege es su dominio.
+
+    Si filtrara sólo por `customer_rank > 0`, un cliente marcado que todavía no
+    registra ventas quedaría marcado y fuera de la pantalla: nadie podría volver a
+    encontrarlo para desmarcarlo, y sus remitos seguirían naciendo con el tilde sin
+    que se vea por qué.
+    """
+
+    def test_el_dominio_alcanza_a_un_marcado_sin_ventas(self):
+        accion = self.env.ref("surtecnica_remito.action_clientes_hes")
+        marcado = self.env["res.partner"].create({
+            "name": "Cliente marcado sin ventas",
+            "guvens_requiere_hes": True,
+        })
+        self.assertEqual(marcado.customer_rank, 0)
+        encontrados = self.env["res.partner"].search(
+            safe_eval(accion.domain) + [("id", "=", marcado.id)])
+        self.assertEqual(encontrados, marcado)
+
+    def test_la_lista_no_deja_crear_ni_borrar_contactos(self):
+        """Un alta de contacto hecha de paso acá sería un duplicado."""
+        vista = self.env.ref("surtecnica_remito.view_partner_tree_hes")
+        self.assertIn('create="0"', vista.arch)
+        self.assertIn('delete="0"', vista.arch)
+
+    def test_el_menu_no_lo_ve_quien_solo_arma_remitos(self):
+        """La lista la maneja quien factura; en el remito se destilda y nada más.
+
+        El corte no puede ser por grupo de inventario: en esta instancia quien arma
+        los remitos es Administrador de Inventario y quien factura es sólo Usuario.
+        """
+        menu = self.env.ref("surtecnica_remito.menu_clientes_hes")
+        self.assertEqual(
+            menu.groups_id,
+            self.env.ref("account.group_account_invoice"),
+        )
