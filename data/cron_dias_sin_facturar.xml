@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        «Días hábiles sin facturar» se cuenta contra HOY, y "hoy" no es un campo que
+        Odoo pueda marcar como sucio: sin este cron el número se congela el día que
+        se calculó y el indicador envejece sin que nada lo avise.
+
+        Corre a la madrugada, antes de que alguien mire el tablero, y sólo toca los
+        remitos que están esperando factura.
+    -->
+    <record id="cron_dias_sin_facturar" model="ir.cron">
+        <field name="name">Remitos: refrescar los días sin facturar</field>
+        <field name="model_id" ref="stock.model_stock_picking"/>
+        <field name="state">code</field>
+        <field name="code">model._guvens_cron_dias_sin_facturar()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="numbercall">-1</field>
+        <field name="active" eval="True"/>
+        <field name="nextcall" eval="(DateTime.now().replace(hour=6, minute=30, second=0) + timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')"/>
+    </record>
+</odoo>

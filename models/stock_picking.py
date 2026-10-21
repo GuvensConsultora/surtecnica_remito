@@ -78,6 +78,23 @@ class StockPicking(models.Model):
              "El día del remito no cuenta: un remito del viernes facturado el lunes "
              "lleva un día.",
     )
+    guvens_dias_sin_facturar = fields.Integer(
+        string="Días hábiles sin facturar",
+        compute="_compute_guvens_dias_sin_facturar",
+        store=True,
+        group_operator="avg",
+        help="Días hábiles que lleva esperando un remito que TODAVÍA no se facturó, "
+             "contados hasta hoy. En los que ya tienen factura queda en cero: para "
+             "esos el número es «Días hábiles hasta la factura».\n\n"
+             "Las dos medidas hacen falta juntas. El promedio de los facturados no ve "
+             "al cliente que no factura nunca —sus remitos no tienen días que "
+             "promediar—, así que medir sólo eso premia justamente al que más se "
+             "cuelga. Medido en testing el 21/10/2026: el cliente que más demora "
+             "según la empresa tenía 7 remitos y los 7 sin facturar, o sea que no "
+             "aparecía en ningún promedio.\n\n"
+             "Lo recalcula un proceso diario, porque el número depende de qué día es "
+             "hoy.",
+    )
     guvens_plazo_estado = fields.Selection(
         selection=[
             ("en_plazo", "Dentro del plazo"),
@@ -335,6 +352,39 @@ class StockPicking(models.Model):
                 picking.guvens_plazo_estado = "facturado"
             else:
                 picking.guvens_plazo_estado = "en_plazo" if dias <= plazo else "excedido"
+
+    @api.depends("guvens_remito_fecha", "guvens_plazo_estado")
+    def _compute_guvens_dias_sin_facturar(self):
+        """Lo que lleva esperando un remito sin factura, hasta hoy.
+
+        Depende del estado y no de la factura directamente: así se apaga solo en
+        cuanto el remito pasa a cualquier estado que ya tenga factura.
+
+        «Hoy» no es un campo, así que este cálculo envejece sin que nada lo marque
+        como sucio. Lo refresca el cron `cron_dias_sin_facturar`, una vez por día.
+        """
+        for picking in self:
+            if picking.guvens_plazo_estado != "pendiente" or not picking.guvens_remito_fecha:
+                picking.guvens_dias_sin_facturar = 0
+                continue
+            desde = picking._guvens_fecha_local(picking.guvens_remito_fecha)
+            picking.guvens_dias_sin_facturar = picking._guvens_dias_habiles(
+                desde, fields.Date.context_today(picking))
+
+    @api.model
+    def _guvens_cron_dias_sin_facturar(self):
+        """Refresca la espera en curso de los remitos pendientes.
+
+        Acotado a los que están esperando —unas decenas—, no a todos los albaranes.
+        Los que ya se facturaron tienen el campo en cero y no cambian más.
+        """
+        pendientes = self.search([
+            ("guvens_remito_fecha", "!=", False),
+            ("guvens_plazo_estado", "=", "pendiente"),
+        ])
+        if pendientes:
+            pendientes.modified(["guvens_plazo_estado"])
+        return len(pendientes)
 
     # ------------------------------------------------------------------
     #  Aviso para facturar

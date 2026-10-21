@@ -15,6 +15,8 @@
                 <field name="guvens_remito_fecha" string="Confeccionado"/>
                 <field name="guvens_factura_id" string="Factura"/>
                 <field name="guvens_dias_a_factura" string="Días hábiles" avg="Promedio"/>
+                <field name="guvens_dias_sin_facturar" string="Esperando" avg="Promedio"
+                       optional="show"/>
                 <field name="guvens_remito_requiere_hes" string="HES" optional="show"/>
                 <field name="guvens_plazo_estado" string="Estado"/>
                 <field name="company_id" groups="base.group_multi_company" optional="hide"/>
@@ -28,9 +30,13 @@
         <field name="model">stock.picking</field>
         <field name="arch" type="xml">
             <pivot string="Plazo de facturación" sample="0">
+                <!-- Por cliente y con las DOS medidas: el promedio de lo facturado
+                     solo no alcanza, porque el que nunca factura no tiene días que
+                     promediar y queda fuera del ranking. -->
+                <field name="partner_id" type="row"/>
                 <field name="guvens_plazo_estado" type="col"/>
-                <field name="guvens_remito_fecha" interval="month" type="row"/>
                 <field name="guvens_dias_a_factura" type="measure"/>
+                <field name="guvens_dias_sin_facturar" type="measure"/>
             </pivot>
         </field>
     </record>
@@ -62,6 +68,11 @@
                         domain="[('guvens_plazo_estado', '=', 'en_plazo')]"/>
                 <filter name="pendiente" string="Pendientes de facturar"
                         domain="[('guvens_plazo_estado', '=', 'pendiente')]"/>
+                <separator/>
+                <filter name="esperando" string="Esperando hace más de 5 días"
+                        domain="[('guvens_dias_sin_facturar', '>', 5)]"
+                        help="Remitos sin factura, ordenados por lo que llevan esperando.
+                              Es la parte que el promedio de los facturados no muestra."/>
                 <separator/>
                 <!-- El corte que pidió Franco: comparar los dos grupos. Va por el
                      tilde del remito y no por la lista del cliente, porque un cliente

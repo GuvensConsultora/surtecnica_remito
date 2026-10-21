@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta
 
+from odoo import fields
 from odoo.tests import TransactionCase, tagged
 
 # Semana de referencia: el 16/10/2026 es viernes, el 19 lunes, el 20 martes y el
@@ -204,3 +205,62 @@ class TestFeriados(TransactionCase):
         ausencia.unlink()
         remito.invalidate_recordset()
         self.assertEqual(remito._guvens_dias_habiles(VIERNES, VIERNES_SIGUIENTE), 5)
+
+
+@tagged("post_install", "-at_install")
+class TestDiasSinFacturar(TransactionCase):
+    """La espera en curso: lo que el promedio de los facturados no muestra.
+
+    Medido en testing el 21/10/2026: el cliente que la empresa considera el más
+    lento tenía 7 remitos y los 7 sin facturar, así que no aparecía en ningún
+    promedio. Medir sólo lo facturado premia al que más se cuelga.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.cliente = cls.env["res.partner"].create({"name": "Cliente que no factura"})
+        cls.tipo = cls.env["stock.picking.type"].search([
+            ("code", "=", "outgoing"),
+            ("company_id", "=", cls.env.company.id),
+        ], limit=1)
+
+    def _remito(self, numero=False):
+        vals = {
+            "partner_id": self.cliente.id,
+            "picking_type_id": self.tipo.id,
+            "location_id": self.tipo.default_location_src_id.id,
+            "location_dest_id": self.tipo.default_location_dest_id.id,
+        }
+        if numero:
+            vals["guvens_remito_number"] = numero
+        return self.env["stock.picking"].create(vals)
+
+    def test_un_remito_sin_sello_no_espera_nada(self):
+        self.assertEqual(self._remito().guvens_dias_sin_facturar, 0)
+
+    def test_cuenta_los_dias_habiles_hasta_hoy(self):
+        """El sello se fuerza hacia atrás para no depender de la fecha del test."""
+        remito = self._remito(numero="0002-00077001")
+        self.assertEqual(remito.guvens_plazo_estado, "pendiente")
+        hoy = fields.Date.context_today(remito)
+        remito.guvens_remito_fecha = datetime.combine(hoy, time(12, 0)) - timedelta(days=14)
+        remito.invalidate_recordset()
+        esperado = remito._guvens_dias_habiles(
+            remito._guvens_fecha_local(remito.guvens_remito_fecha), hoy)
+        self.assertEqual(remito.guvens_dias_sin_facturar, esperado)
+        self.assertGreater(remito.guvens_dias_sin_facturar, 0,
+                           "Catorce días corridos tienen que dejar días hábiles")
+
+    def test_el_cron_alcanza_a_los_pendientes(self):
+        remito = self._remito(numero="0002-00077002")
+        tocados = self.env["stock.picking"]._guvens_cron_dias_sin_facturar()
+        self.assertGreaterEqual(tocados, 1)
+        self.assertEqual(remito.guvens_plazo_estado, "pendiente")
+
+    def test_el_cron_existe_y_esta_activo(self):
+        """Sin el cron el número se congela el día que se calculó, sin avisar."""
+        cron = self.env.ref("surtecnica_remito.cron_dias_sin_facturar")
+        self.assertTrue(cron.active)
+        self.assertEqual(cron.interval_type, "days")
+        self.assertEqual(cron.interval_number, 1)
