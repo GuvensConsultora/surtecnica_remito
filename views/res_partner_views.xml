@@ -64,8 +64,11 @@
         <field name="name">res.partner.tree.hes</field>
         <field name="model">res.partner</field>
         <field name="arch" type="xml">
+            <!-- El orden va por `complete_name`, que está almacenado: ordenar por
+                 `display_name` no ordena nada —es un compute sin store— y la lista
+                 sale en el orden del modelo, que para cargar de corrido es inservible. -->
             <tree string="Clientes que exigen HES" editable="bottom"
-                  create="0" delete="0" default_order="display_name">
+                  create="0" delete="0" default_order="complete_name">
                 <field name="display_name" string="Cliente" readonly="1"/>
                 <field name="vat" string="CUIT" readonly="1" optional="show"/>
                 <field name="guvens_requiere_hes" string="Exige HES / autorización"/>
