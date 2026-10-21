@@ -1,6 +1,6 @@
 {
     'name': 'Surtecnica - Remito desde el pedido de venta',
-    'version': '17.0.1.14.1',
+    'version': '17.0.1.15.0',
     'category': 'Inventory/Inventory',
     'summary': 'Imprime el remito con el formato del preimpreso, tomando los datos del pedido de venta',
     'description': """
@@ -35,8 +35,11 @@ Qué hace
   arranca el plazo de facturación: el remito quedó confeccionado. Se pone una sola
   vez —corregir un dígito después no la mueve— y se limpia si se borra el número.
 * Mide el plazo de facturación: días hábiles entre que se confecciona el remito y
-  se emite la factura del pedido, con el calendario laboral de la compañía (los
-  feriados no suman, siempre que estén cargados ahí). El plazo contra el que se
+  se emite la factura del pedido, con el calendario laboral de la compañía. Los
+  feriados no suman, siempre que estén cargados ahí: el día se resuelve por el
+  mediodía local, así que un feriado cargado desde la pantalla de Odoo resta ese día
+  y no también el siguiente, y al cargarlo o borrarlo los remitos con sello se
+  vuelven a medir solos. El plazo contra el que se
   compara se carga en la ficha de la compañía y nace vacío: mientras tanto se miden
   los días pero no se marca a nadie como excedido. Los pedidos con varias entregas
   o varias facturas quedan como «No determinable» en vez de recibir un plazo que no
