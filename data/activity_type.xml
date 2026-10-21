@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- noupdate: es un dato semilla que el usuario puede renombrar o reconfigurar
+         desde la pantalla, y una actualización del módulo no debe pisárselo
+         (C.15 punto 3). El plazo NO se fija acá: sale del campo de la compañía. -->
+    <data noupdate="1">
+
+        <record id="activity_facturar_remito" model="mail.activity.type">
+            <field name="name">Facturar remito</field>
+            <field name="summary">Facturar el remito</field>
+            <field name="res_model">stock.picking</field>
+            <field name="icon">fa-file-text-o</field>
+            <field name="delay_count">0</field>
+            <field name="delay_unit">days</field>
+            <field name="delay_from">current_date</field>
+            <field name="sequence">10</field>
+        </record>
+
+    </data>
+</odoo>

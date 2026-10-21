@@ -13,11 +13,19 @@
                 <page string="Remitos" name="remito">
                     <group>
                         <field name="guvens_plazo_facturacion_dias"/>
+                        <field name="guvens_aviso_facturacion_user_id"
+                               options="{'no_create': True}"/>
                     </group>
                     <p class="text-muted">
                         Mientras esté vacío, el sistema mide igual los días que pasan
                         entre el remito y la factura, pero no marca a nadie como
                         excedido.
+                    </p>
+                    <p class="text-muted">
+                        Quien figure en «Avisar a» recibe una actividad pendiente cada
+                        vez que se confecciona un remito, con vencimiento según el
+                        plazo. Si está vacío no se avisa a nadie. A los clientes que
+                        exigen HES no se les avisa.
                     </p>
                     <p class="text-muted">
                         Los días se cuentan con el calendario laboral de la compañía.

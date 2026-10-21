@@ -16,6 +16,20 @@ class ResCompany(models.Model):
              "cargados en ese calendario.",
     )
 
+    guvens_aviso_facturacion_user_id = fields.Many2one(
+        "res.users",
+        string="Avisar a",
+        domain=[("share", "=", False)],
+        help="Persona que recibe el aviso cuando se confecciona un remito, para que "
+             "emita la factura. Le aparece como una actividad pendiente, con "
+             "vencimiento según el plazo de más arriba.\n\n"
+             "Nace vacío y mientras lo esté no se avisa a nadie. Conviene apuntarlo "
+             "al usuario con el que trabaja quien factura: si es una cuenta "
+             "compartida, el aviso llega a esa bandeja y no a una persona.\n\n"
+             "A los clientes que exigen HES no se les avisa: ahí el momento de "
+             "facturar no depende de Sur Técnica.",
+    )
+
     def write(self, vals):
         """Recalcula el estado de los remitos cuando cambia el plazo.
 

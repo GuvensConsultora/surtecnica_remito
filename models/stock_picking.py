@@ -175,6 +175,27 @@ class StockPicking(models.Model):
                 dias += 1
         return dias
 
+    def _guvens_sumar_habiles(self, desde, cantidad):
+        """La fecha que resulta de sumarle `cantidad` días hábiles a `desde`.
+
+        Es el inverso de `_guvens_dias_habiles`, y usa el mismo calendario: si el
+        vencimiento se calculara con días corridos, el aviso de un remito del
+        viernes vencería el domingo.
+        """
+        self.ensure_one()
+        calendario = self.company_id.resource_calendar_id
+        laborables = {int(a.dayofweek) for a in calendario.attendance_ids} \
+            if calendario and calendario.attendance_ids else DIAS_LABORABLES_POR_DEFECTO
+        tope = desde + timedelta(days=TOPE_DIAS)
+        feriados = self._guvens_feriados(calendario, desde, tope)
+        dia, puestos, vueltas = desde, 0, 0
+        while puestos < cantidad and vueltas < TOPE_DIAS:
+            dia += timedelta(days=1)
+            vueltas += 1
+            if dia.weekday() in laborables and dia not in feriados:
+                puestos += 1
+        return dia
+
     def _guvens_factura_del_remito(self):
         """La factura que corresponde a este remito, o False si no se puede saber.
 
@@ -253,13 +274,78 @@ class StockPicking(models.Model):
             else:
                 picking.guvens_plazo_estado = "en_plazo" if dias <= plazo else "excedido"
 
+    # ------------------------------------------------------------------
+    #  Aviso para facturar
+    # ------------------------------------------------------------------
+    def _guvens_tipo_actividad_aviso(self):
+        return self.env.ref("surtecnica_remito.activity_facturar_remito",
+                            raise_if_not_found=False)
+
+    def _guvens_actividades_de_aviso(self):
+        """Los avisos abiertos de este remito, para no duplicarlos ni dejarlos colgados."""
+        tipo = self._guvens_tipo_actividad_aviso()
+        if not tipo:
+            return self.env["mail.activity"]
+        return self.env["mail.activity"].search([
+            ("res_model", "=", "stock.picking"),
+            ("res_id", "in", self.ids),
+            ("activity_type_id", "=", tipo.id),
+        ])
+
+    def _guvens_crear_aviso_facturar(self):
+        """Avisa a quien factura que hay un remito confeccionado.
+
+        No se avisa si: no hay destinatario cargado en la compañía, el cliente exige
+        HES (ahí facturar no depende de nosotros), el remito ya tiene factura, o ya
+        hay un aviso abierto. El vencimiento sale del plazo de la compañía, contado
+        en días hábiles como el resto del indicador.
+        """
+        tipo = self._guvens_tipo_actividad_aviso()
+        if not tipo:
+            return
+        for picking in self:
+            destinatario = picking.company_id.guvens_aviso_facturacion_user_id
+            if not destinatario or not picking.guvens_remito_fecha:
+                continue
+            if picking.partner_id.guvens_requiere_hes:
+                continue
+            if picking.guvens_factura_id:
+                continue
+            if picking._guvens_actividades_de_aviso():
+                continue
+
+            dia = picking._guvens_fecha_local(picking.guvens_remito_fecha)
+            plazo = picking.company_id.guvens_plazo_facturacion_dias
+            vence = picking._guvens_sumar_habiles(dia, plazo) if plazo else dia
+            picking.activity_schedule(
+                "surtecnica_remito.activity_facturar_remito",
+                date_deadline=vence,
+                user_id=destinatario.id,
+                note=_("Remito %(numero)s de %(cliente)s. Confeccionado el %(fecha)s.",
+                       numero=picking.guvens_remito_number or picking.name,
+                       cliente=picking.partner_id.display_name or "-",
+                       fecha=dia.strftime("%d/%m/%Y")),
+            )
+
+    def _guvens_cerrar_aviso_facturar(self):
+        """Cierra el aviso cuando el remito ya tiene factura.
+
+        Sin esto quedan actividades vencidas de remitos ya facturados, que es ruido
+        en la bandeja de quien factura y hace que deje de mirarlas.
+        """
+        actividades = self._guvens_actividades_de_aviso()
+        if actividades:
+            actividades.action_feedback(feedback=_("Facturado."))
+
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
             if vals.get("guvens_remito_number"):
                 vals["guvens_remito_number"] = vals["guvens_remito_number"].strip()
                 vals.setdefault("guvens_remito_fecha", fields.Datetime.now())
-        return super().create(vals_list)
+        pickings = super().create(vals_list)
+        pickings.filtered("guvens_remito_fecha")._guvens_crear_aviso_facturar()
+        return pickings
 
     def write(self, vals):
         """Estampa el sello de confección cuando aparece el número del talonario.
@@ -283,6 +369,11 @@ class StockPicking(models.Model):
                 super(StockPicking, sin_sello).write({
                     "guvens_remito_fecha": fields.Datetime.now(),
                 })
+                sin_sello._guvens_crear_aviso_facturar()
+        elif "guvens_remito_number" in vals:
+            # Le borraron el número: el remito dejó de estar confeccionado y el aviso
+            # ya no corresponde.
+            self._guvens_actividades_de_aviso().unlink()
         return resultado
 
     @api.constrains("guvens_remito_number", "company_id")

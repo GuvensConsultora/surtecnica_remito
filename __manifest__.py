@@ -1,6 +1,6 @@
 {
     'name': 'Surtecnica - Remito desde el pedido de venta',
-    'version': '17.0.1.8.0',
+    'version': '17.0.1.9.0',
     'category': 'Inventory/Inventory',
     'summary': 'Imprime el remito con el formato del preimpreso, tomando los datos del pedido de venta',
     'description': """
@@ -41,6 +41,10 @@ Qué hace
   los días pero no se marca a nadie como excedido. Los pedidos con varias entregas
   o varias facturas quedan como «No determinable» en vez de recibir un plazo que no
   se puede atribuir. Menú: Inventario > Operaciones > Plazo de facturación.
+* Avisa a quien factura cuando se confecciona un remito: le crea una actividad
+  pendiente con vencimiento según el plazo, y la cierra sola cuando la factura se
+  postea. El destinatario se elige en la ficha de la compañía y nace vacío: sin él
+  no se avisa a nadie. A los clientes con HES no se les avisa.
 * Marca en la ficha del cliente si exige HES para facturar: el código de conformidad
   que algunos clientes emiten al recibir la mercadería y sin el cual rechazan la
   factura. A esos clientes no se les reclama el plazo de facturación, porque el
@@ -66,10 +70,12 @@ el albarán validado; este imprime el bloque de recepción para firmar a mano.
         'l10n_ar',
         'account',
         'resource',
+        'mail',
     ],
     'data': [
         'security/remito_security.xml',
         'data/menu_restriccion.xml',
+        'data/activity_type.xml',
         'views/res_company_views.xml',
         'views/res_partner_views.xml',
         'views/stock_picking_views.xml',
