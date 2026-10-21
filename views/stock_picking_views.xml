@@ -12,6 +12,10 @@
                  que se carga al tener el papel en la mano. -->
             <xpath expr="//field[@name='partner_id']" position="after">
                 <field name="guvens_remito_number" placeholder="0002-00010576"/>
+                <!-- Nace marcado si el cliente está en la lista de los que exigen HES,
+                     y se destilda acá cuando esta entrega puntual no la lleva: las
+                     excepciones son del remito, no del cliente. -->
+                <field name="guvens_remito_requiere_hes"/>
                 <!-- El sello lo pone el sistema al cargarse el número. Se muestra sólo
                      cuando existe: un campo de fecha vacío al lado del número invita a
                      completarlo, y no es algo que se cargue a mano. -->

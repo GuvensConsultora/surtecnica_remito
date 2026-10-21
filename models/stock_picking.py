@@ -36,6 +36,24 @@ class StockPicking(models.Model):
              "cambio se borra el número, la fecha se limpia.",
     )
 
+    guvens_remito_requiere_hes = fields.Boolean(
+        string="Requiere HES / autorización",
+        compute="_compute_guvens_remito_requiere_hes",
+        store=True,
+        readonly=False,
+        copy=False,
+        tracking=True,
+        help="Este remito necesita el código de conformidad del cliente (HES) o una "
+             "autorización suya antes de poder facturarlo.\n\n"
+             "Nace marcado si el cliente está en la lista de los que lo exigen, y se "
+             "DESTILDA cuando esa entrega puntual no lo lleva. El mismo cliente puede "
+             "exigirlo para un servicio y no para una entrega de mercadería, así que la "
+             "decisión es de cada remito: la lista del cliente sólo da el valor inicial.\n\n"
+             "Mientras esté marcado, al remito no se le reclama el plazo de facturación "
+             "—el momento de facturar no depende de Sur Técnica— pero el aviso para "
+             "facturar se crea igual y queda pendiente hasta que llegue el código.",
+    )
+
     # --- indicador de plazo de facturación ---
     guvens_factura_id = fields.Many2one(
         "account.move",
@@ -65,7 +83,7 @@ class StockPicking(models.Model):
             ("en_plazo", "Dentro del plazo"),
             ("excedido", "Excedido"),
             ("facturado", "Facturado (sin plazo definido)"),
-            ("hes", "Cliente con HES"),
+            ("hes", "Espera HES / autorización"),
             ("pendiente", "Pendiente de facturar"),
             ("previo", "Facturada antes del remito"),
             ("indeterminado", "No determinable"),
@@ -74,8 +92,9 @@ class StockPicking(models.Model):
         compute="_compute_guvens_plazo",
         store=True,
         help="Estado del remito frente al plazo de facturación.\n\n"
-             "«Cliente con HES» son los que emiten un código de conformidad al recibir: "
-             "se les miden los días igual, para poder compararlos, pero no se les "
+             "«Espera HES / autorización» son los remitos con ese tilde marcado: el "
+             "cliente emite un código de conformidad al recibir, o tiene que autorizar. "
+             "Se les miden los días igual, para poder compararlos, pero no se les "
              "reclama el plazo porque facturar no depende de nosotros.\n\n"
              "«No determinable» es un pedido con varias entregas o varias facturas, "
              "donde no se puede atribuir una factura a un remito sin revisarlo a mano.\n\n"
@@ -103,6 +122,26 @@ class StockPicking(models.Model):
         default=True,
         help="Desmarcar cuando el remito acompaña mercadería sin valorizar.",
     )
+
+    @api.depends("partner_id")
+    def _compute_guvens_remito_requiere_hes(self):
+        """Arranca del cliente, y después manda el remito.
+
+        Es un compute EDITABLE (`readonly=False`): la lista de clientes que exigen HES
+        da el valor con el que nace el remito, pero el operador lo destilda cuando esa
+        entrega puntual no la lleva. Franco lo pidió así —«que de forma predeterminada
+        figure con hes o autorización» y «que se pueda destildar cuando surja alguna
+        excepción»—, porque las excepciones no se pueden saber de antemano: el mismo
+        cliente la exige por servicio y no por mercadería, o según el monto o si la
+        compra es para una obra.
+
+        Depende sólo de `partner_id` y no del campo del cliente, para que marcar a un
+        cliente en la lista no vuelva a pisar el tilde de los remitos ya confeccionados
+        —y con él la decisión que alguien tomó a mano—. Si en cambio se cambia el
+        cliente del albarán, el tilde se recalcula: cambió el hecho del que salía.
+        """
+        for picking in self:
+            picking.guvens_remito_requiere_hes = picking.partner_id.guvens_requiere_hes
 
     # ------------------------------------------------------------------
     #  Indicador de plazo
@@ -224,7 +263,7 @@ class StockPicking(models.Model):
         "sale_id.invoice_ids.state",
         "sale_id.invoice_ids.move_type",
         "sale_id.picking_ids.guvens_remito_number",
-        "partner_id.guvens_requiere_hes",
+        "guvens_remito_requiere_hes",
     )
     def _compute_guvens_plazo(self):
         for picking in self:
@@ -262,9 +301,11 @@ class StockPicking(models.Model):
             dias = picking._guvens_dias_habiles(dia_remito, dia_factura)
             picking.guvens_dias_a_factura = dias
 
-            if picking.partner_id.guvens_requiere_hes:
+            if picking.guvens_remito_requiere_hes:
                 # Se le miden los días igual —Franco quiere comparar los dos grupos—
                 # pero no se le reclama el plazo: facturar no depende de nosotros.
+                # Se mira el tilde DEL REMITO y no la lista del cliente: el mismo
+                # cliente puede exigir la HES en una entrega y no en la siguiente.
                 picking.guvens_plazo_estado = "hes"
                 continue
 
@@ -336,7 +377,7 @@ class StockPicking(models.Model):
                        fecha=dia.strftime("%d/%m/%Y"),
                        espera=_(". Este cliente factura contra HES: queda pendiente "
                                 "hasta que mande el código.")
-                       if picking.partner_id.guvens_requiere_hes else ""),
+                       if picking.guvens_remito_requiere_hes else ""),
             )
 
     def action_guvens_generar_avisos_pendientes(self, dias_max=7):

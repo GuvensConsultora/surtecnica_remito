@@ -26,8 +26,9 @@ class ResCompany(models.Model):
              "Nace vacío y mientras lo esté no se avisa a nadie. Conviene apuntarlo "
              "al usuario con el que trabaja quien factura: si es una cuenta "
              "compartida, el aviso llega a esa bandeja y no a una persona.\n\n"
-             "A los clientes que exigen HES no se les avisa: ahí el momento de "
-             "facturar no depende de Sur Técnica.",
+             "A los remitos que esperan HES o autorización también se les avisa: el "
+             "aviso queda pendiente hasta que llegue el código, y la nota lo aclara. "
+             "Lo que no se les reclama es el plazo.",
     )
 
     def write(self, vals):

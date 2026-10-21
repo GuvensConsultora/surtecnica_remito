@@ -1,6 +1,6 @@
 {
     'name': 'Surtecnica - Remito desde el pedido de venta',
-    'version': '17.0.1.12.0',
+    'version': '17.0.1.13.0',
     'category': 'Inventory/Inventory',
     'summary': 'Imprime el remito con el formato del preimpreso, tomando los datos del pedido de venta',
     'description': """
@@ -44,13 +44,16 @@ Qué hace
 * Avisa a quien factura cuando se confecciona un remito: le crea una actividad
   pendiente con vencimiento según el plazo, y la cierra sola cuando la factura se
   postea. El destinatario se elige en la ficha de la compañía y nace vacío: sin él
-  no se avisa a nadie. El aviso es genérico: a los clientes con HES también se les
-  crea, y queda pendiente hasta que manden el código.
-* Marca en la ficha del cliente si exige HES para facturar: el código de conformidad
-  que algunos clientes emiten al recibir la mercadería y sin el cual rechazan la
-  factura. A esos clientes no se les reclama el plazo de facturación, porque el
-  momento de facturar no depende de Sur Técnica. Nace desmarcado y lo carga
-  administración: no hay forma de deducirlo del sistema.
+  no se avisa a nadie. El aviso es genérico: a los remitos que esperan HES también se
+  les crea, y queda pendiente hasta que llegue el código.
+* Marca en cada remito si espera HES o autorización del cliente para poder
+  facturarlo. El tilde nace marcado para los clientes que figuran en la lista de los
+  que lo exigen —se carga en su ficha, cliente por cliente— y se destilda en el
+  remito puntual que no la lleva. La decisión es del remito y no del cliente porque
+  el mismo cliente la exige según el caso: un servicio sí y una entrega de rodillos
+  no, o según el monto o si la compra es para una obra. A los remitos con el tilde
+  marcado no se les reclama el plazo de facturación —el momento de facturar no
+  depende de Sur Técnica— pero el aviso se les crea igual.
 
 Qué NO hace
 -----------
