@@ -361,10 +361,22 @@ class StockPicking(models.Model):
     def _guvens_factura_del_remito(self):
         """La factura que corresponde a este remito, o False si no se puede saber.
 
-        El apareo es por el pedido de venta. Cuando el pedido tiene varias entregas
-        confeccionadas o varias facturas posteadas, devuelve False a propósito: en
-        el informe del 20/10 eran 30 casos de 169, y atribuirles un plazo sería
-        inventar cuál factura cubre cuál entrega.
+        El apareo es por el pedido de venta. Lo directo es una factura y un remito.
+        Con varias entregas o varias facturas hay dos casos que se resuelven sin
+        adivinar, siempre que el pedido esté facturado completo:
+
+        - Todas las facturas son anteriores a este remito: no importa cuál cubre
+          qué, el remito salió después de facturar. Devuelve la última, y el
+          cálculo lo clasifica como «previo» (caso Equimac S06232, dos anticipos).
+        - Una sola factura posterior a TODOS los remitos del pedido: esa factura
+          los cubre a todos, y cada remito se mide contra ella (caso Marolio
+          S06714, dos remitos del 23/10 y una factura del 26/10).
+
+        Lo de «facturado completo» es la guarda: sin ella, un remito que todavía
+        no se facturó quedaría medido contra la factura de otra entrega. Todo lo
+        demás (p. ej. Ledesma S06511: dos entregas parciales con una factura cada
+        una) sigue devolviendo False: atribuirle un plazo sería inventar cuál
+        factura cubre cuál entrega. Ajuste pedido por Franco el 27/10/2026.
         """
         self.ensure_one()
         pedido = self.sale_id
@@ -373,19 +385,37 @@ class StockPicking(models.Model):
         facturas = pedido.invoice_ids.filtered(
             lambda m: m.move_type == "out_invoice" and m.state == "posted"
         )
-        if len(facturas) != 1:
+        if not facturas:
             return False
         remitos = pedido.picking_ids.filtered(lambda p: p.guvens_remito_number)
-        if len(remitos) > 1:
+        if len(facturas) == 1 and len(remitos) <= 1:
+            return facturas
+
+        if pedido.invoice_status != "invoiced" or not self.guvens_remito_fecha:
             return False
-        return facturas
+
+        def dia_factura(factura):
+            return factura.invoice_date or self._guvens_fecha_local(factura.create_date)
+
+        dia_remito = self._guvens_fecha_local(self.guvens_remito_fecha)
+        if all(dia_factura(f) < dia_remito for f in facturas):
+            return facturas.sorted(dia_factura)[-1]
+
+        if len(facturas) == 1 and remitos and all(remitos.mapped("guvens_remito_fecha")):
+            ultimo_remito = max(self._guvens_fecha_local(r.guvens_remito_fecha) for r in remitos)
+            if dia_factura(facturas) >= ultimo_remito:
+                return facturas
+        return False
 
     @api.depends(
         "guvens_remito_fecha",
         "sale_id",
         "sale_id.invoice_ids.state",
         "sale_id.invoice_ids.move_type",
+        "sale_id.invoice_ids.invoice_date",
+        "sale_id.invoice_status",
         "sale_id.picking_ids.guvens_remito_number",
+        "sale_id.picking_ids.guvens_remito_fecha",
         "guvens_remito_requiere_hes",
         "guvens_motivo_no_facturado",
     )
