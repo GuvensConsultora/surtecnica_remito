@@ -136,7 +136,7 @@ class TestTildeHesDelRemito(TransactionCase):
 
     # ---------------- efecto sobre el indicador ----------------
     def test_sin_factura_el_tilde_no_cambia_el_estado(self):
-        """El estado «Espera HES» recién aparece cuando hay factura para medir.
+        """El estado «Facturado con HES» recién aparece cuando hay factura para medir.
 
         Hasta entonces el remito está «Pendiente de facturar», tilde o no: lo que
         el tilde define es si, una vez facturado, se le reclama el plazo. Ese tramo
@@ -148,6 +148,15 @@ class TestTildeHesDelRemito(TransactionCase):
         self.assertEqual(remito.guvens_plazo_estado, "pendiente")
         remito.guvens_remito_requiere_hes = False
         self.assertEqual(remito.guvens_plazo_estado, "pendiente")
+
+    def test_el_estado_hes_dice_facturado(self):
+        """El estado «hes» sólo se asigna con factura: la etiqueta no puede decir «Espera».
+
+        Franco lo vio el 03/11/2026: un remito con HES ya facturado figuraba «Espera HES /
+        autorización». La clave técnica sigue siendo «hes» para no tocar lo almacenado.
+        """
+        etiquetas = dict(self.env["stock.picking"]._fields["guvens_plazo_estado"].selection)
+        self.assertEqual(etiquetas["hes"], "Facturado con HES / autorización")
 
     def test_el_estado_depende_del_tilde_y_no_del_cliente(self):
         """El `@api.depends` del plazo tiene que escuchar al tilde del remito.

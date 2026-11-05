@@ -18,7 +18,7 @@
                 <field name="guvens_remito_requiere_hes"/>
                 <!-- Sólo mientras no haya factura: después el motivo no dice nada. -->
                 <field name="guvens_motivo_no_facturado"
-                       invisible="guvens_plazo_estado not in ['pendiente', 'hes', 'no_factura']"/>
+                       invisible="guvens_plazo_estado not in ['pendiente', 'no_factura']"/>
                 <!-- El sello lo pone el sistema al cargarse el número. Se muestra sólo
                      cuando existe: un campo de fecha vacío al lado del número invita a
                      completarlo, y no es algo que se cargue a mano. -->

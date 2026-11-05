@@ -128,7 +128,7 @@ class StockPicking(models.Model):
             ("en_plazo", "Dentro del plazo"),
             ("excedido", "Excedido"),
             ("facturado", "Facturado (sin plazo definido)"),
-            ("hes", "Espera HES / autorización"),
+            ("hes", "Facturado con HES / autorización"),
             ("no_factura", "No se factura"),
             ("pendiente", "Pendiente de facturar"),
             ("previo", "Facturada antes del remito"),
@@ -138,8 +138,10 @@ class StockPicking(models.Model):
         compute="_compute_guvens_plazo",
         store=True,
         help="Estado del remito frente al plazo de facturación.\n\n"
-             "«Espera HES / autorización» son los remitos con ese tilde marcado: el "
-             "cliente emite un código de conformidad al recibir, o tiene que autorizar. "
+             "«Facturado con HES / autorización» son los remitos ya facturados que tienen "
+             "ese tilde marcado: el cliente emite un código de conformidad al recibir, o "
+             "tiene que autorizar. Mientras no se facturan figuran como «Pendiente de "
+             "facturar», igual que el resto. "
              "Se les miden los días igual, para poder compararlos, pero no se les "
              "reclama el plazo porque facturar no depende de nosotros.\n\n"
              "«No se factura» son los que alguien marcó con ese motivo: no están "
