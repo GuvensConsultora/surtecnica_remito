@@ -118,6 +118,8 @@
                             context="{'group_by': 'guvens_valor_moneda_id'}"/>
                     <filter name="g_mes" string="Mes del remito"
                             context="{'group_by': 'guvens_remito_fecha:month'}"/>
+                    <filter name="g_cumplimiento" string="Cumplimiento del plazo"
+                            context="{'group_by': 'guvens_cumplimiento'}"/>
                     <filter name="g_compania" string="Compañía"
                             context="{'group_by': 'company_id'}"
                             groups="base.group_multi_company"/>
@@ -170,6 +172,78 @@
               parent="stock.menu_stock_warehouse_mgmt"
               action="action_plazo_facturacion"
               sequence="8"/>
+
+    <!-- ============ CUMPLIMIENTO MENSUAL ============ -->
+    <!-- Pedido de Franco (26/11/2026): qué parte de los remitos de cada mes se
+         facturó en tiempo y forma, para fijar una meta anual. Sólo entran los que
+         dependen de nosotros (ver ayuda de «Cumplimiento del plazo»). -->
+    <record id="view_picking_pivot_cumplimiento" model="ir.ui.view">
+        <field name="name">stock.picking.pivot.cumplimiento</field>
+        <field name="model">stock.picking</field>
+        <field name="arch" type="xml">
+            <pivot string="Cumplimiento mensual" sample="0">
+                <field name="guvens_remito_fecha" interval="month" type="row"/>
+                <field name="guvens_en_tiempo" type="measure"/>
+                <field name="guvens_fuera_plazo" type="measure"/>
+                <field name="guvens_cumplimiento_pct" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="view_picking_graph_cumplimiento" model="ir.ui.view">
+        <field name="name">stock.picking.graph.cumplimiento</field>
+        <field name="model">stock.picking</field>
+        <field name="arch" type="xml">
+            <graph string="Cumplimiento mensual" type="line" sample="0">
+                <field name="guvens_remito_fecha" interval="month"/>
+                <field name="guvens_cumplimiento_pct" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="action_cumplimiento_mensual" model="ir.actions.act_window">
+        <field name="name">Cumplimiento mensual</field>
+        <field name="res_model">stock.picking</field>
+        <field name="view_mode">pivot,graph,tree,form</field>
+        <field name="domain">[('guvens_cumplimiento', '!=', False)]</field>
+        <field name="search_view_id" ref="view_picking_search_plazo"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Todavía no hay remitos para medir
+            </p>
+            <p>
+                Cada mes muestra cuántos remitos se facturaron en tiempo y forma,
+                cuántos fuera de plazo (incluidos los que siguen sin facturar con el
+                plazo vencido) y el porcentaje de cumplimiento. No cuentan los que
+                esperan HES / autorización ni los que no se facturan.
+            </p>
+        </field>
+    </record>
+
+    <record id="action_cumplimiento_mensual_pivot" model="ir.actions.act_window.view">
+        <field name="sequence">1</field>
+        <field name="view_mode">pivot</field>
+        <field name="view_id" ref="view_picking_pivot_cumplimiento"/>
+        <field name="act_window_id" ref="action_cumplimiento_mensual"/>
+    </record>
+    <record id="action_cumplimiento_mensual_graph" model="ir.actions.act_window.view">
+        <field name="sequence">2</field>
+        <field name="view_mode">graph</field>
+        <field name="view_id" ref="view_picking_graph_cumplimiento"/>
+        <field name="act_window_id" ref="action_cumplimiento_mensual"/>
+    </record>
+    <record id="action_cumplimiento_mensual_tree" model="ir.actions.act_window.view">
+        <field name="sequence">3</field>
+        <field name="view_mode">tree</field>
+        <field name="view_id" ref="view_picking_tree_plazo"/>
+        <field name="act_window_id" ref="action_cumplimiento_mensual"/>
+    </record>
+
+    <menuitem id="menu_cumplimiento_mensual"
+              name="Cumplimiento mensual"
+              parent="stock.menu_stock_warehouse_mgmt"
+              action="action_cumplimiento_mensual"
+              sequence="9"/>
 
     <!-- ============ ENTREGADO Y NO FACTURADO ============ -->
     <!-- El saldo que hoy no está en ninguna cuenta corriente: la entrega salió y no

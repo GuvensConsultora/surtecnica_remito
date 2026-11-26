@@ -196,6 +196,49 @@ class StockPicking(models.Model):
              "número es histórico, no se mueve solo y no hace falta un proceso que lo "
              "refresque.",
     )
+    # --- cumplimiento del plazo: el indicador mensual que pidió Franco (26/11/2026) ---
+    # Cuenta sólo lo que depende de nosotros: en plazo, excedido, y los que todavía no
+    # se facturaron pero ya pasaron el plazo. Quedan afuera HES, «no se factura»,
+    # facturados antes del remito y los no determinables.
+    guvens_cumplimiento = fields.Selection(
+        selection=[
+            ("en_tiempo", "En tiempo y forma"),
+            ("fuera", "Fuera de plazo"),
+        ],
+        string="Cumplimiento del plazo",
+        compute="_compute_guvens_cumplimiento",
+        store=True,
+        help="Si el remito entra en el indicador de cumplimiento y cómo.\n\n"
+             "• «En tiempo y forma»: facturado dentro del plazo.\n"
+             "• «Fuera de plazo»: facturado después del plazo, o todavía sin facturar "
+             "y con el plazo ya vencido. Este segundo caso cuenta a propósito: si no, "
+             "el mes en curso parecería mejor de lo que es, porque sólo entrarían los "
+             "que ya se facturaron rápido.\n\n"
+             "Vacío = no entra en el indicador (HES / autorización, no se factura, "
+             "facturado antes del remito, no determinable, o sin facturar y todavía "
+             "dentro del plazo).",
+    )
+    guvens_en_tiempo = fields.Integer(
+        string="En tiempo y forma",
+        compute="_compute_guvens_cumplimiento",
+        store=True,
+        help="1 si el remito se facturó dentro del plazo. Sumado da la cantidad.",
+    )
+    guvens_fuera_plazo = fields.Integer(
+        string="Fuera de plazo",
+        compute="_compute_guvens_cumplimiento",
+        store=True,
+        help="1 si el remito se facturó fuera del plazo o sigue sin facturar con el "
+             "plazo vencido. Sumado da la cantidad.",
+    )
+    guvens_cumplimiento_pct = fields.Float(
+        string="% en tiempo y forma",
+        compute="_compute_guvens_cumplimiento",
+        store=True,
+        group_operator="avg",
+        help="100 si está en tiempo y forma, 0 si está fuera de plazo. El promedio de "
+             "un mes da el porcentaje de cumplimiento de ese mes.",
+    )
     guvens_porcentaje_sin_facturar = fields.Float(
         string="% sin facturar",
         compute="_compute_guvens_porcentaje_sin_facturar",
@@ -716,6 +759,33 @@ class StockPicking(models.Model):
             picking.guvens_valor_sin_facturar_ars = picking._guvens_convertir(
                 total, moneda, picking.company_id.currency_id, fecha)
             picking.guvens_valor_incompleto = incompleto
+
+    @api.depends(
+        "guvens_plazo_estado",
+        "guvens_dias_sin_facturar",
+        "company_id.guvens_plazo_facturacion_dias",
+    )
+    def _compute_guvens_cumplimiento(self):
+        """Clasifica el remito para el indicador mensual de cumplimiento.
+
+        Depende de los días sin facturar: el cron diario los refresca, y así un
+        remito pendiente pasa solo a «fuera de plazo» el día que se le vence.
+        """
+        for picking in self:
+            estado = picking.guvens_plazo_estado
+            plazo = picking.company_id.guvens_plazo_facturacion_dias
+            if estado == "en_plazo":
+                valor = "en_tiempo"
+            elif estado == "excedido":
+                valor = "fuera"
+            elif estado == "pendiente" and plazo and picking.guvens_dias_sin_facturar > plazo:
+                valor = "fuera"
+            else:
+                valor = False
+            picking.guvens_cumplimiento = valor
+            picking.guvens_en_tiempo = 1 if valor == "en_tiempo" else 0
+            picking.guvens_fuera_plazo = 1 if valor == "fuera" else 0
+            picking.guvens_cumplimiento_pct = 100.0 if valor == "en_tiempo" else 0.0
 
     @api.depends("guvens_plazo_estado", "guvens_valor_sin_facturar")
     def _compute_guvens_porcentaje_sin_facturar(self):
