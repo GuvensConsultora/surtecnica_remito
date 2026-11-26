@@ -196,6 +196,15 @@ class StockPicking(models.Model):
              "número es histórico, no se mueve solo y no hace falta un proceso que lo "
              "refresque.",
     )
+    guvens_porcentaje_sin_facturar = fields.Float(
+        string="% sin facturar",
+        compute="_compute_guvens_porcentaje_sin_facturar",
+        # Sin almacenar: un campo almacenado nuevo se calcula al instalar sobre
+        # TODOS los albaranes y les mueve la fecha de modificación.
+        help="Qué parte de lo que salió con este remito falta facturar. Es 100% salvo "
+             "cuando el pedido tiene anticipos facturados: ahí se descuentan (ERAMINE "
+             "S06332, anticipo del 30% → 70% sin facturar).",
+    )
     guvens_valor_incompleto = fields.Boolean(
         string="Valor incompleto",
         compute="_compute_guvens_valor_sin_facturar",
@@ -584,7 +593,8 @@ class StockPicking(models.Model):
     def _guvens_valor_pendiente(self):
         """Valor de lo que salió con este remito, menos los anticipos no aplicados.
 
-        Devuelve (total, moneda, incompleto, fecha, cubierto). `cubierto` es True
+        Devuelve (total, moneda, incompleto, fecha, cubierto, bruto); `bruto` es
+        el valor de lo que salió antes de descontar anticipos. `cubierto` es True
         cuando los anticipos ya facturados alcanzan todo lo que salió con el remito:
         no queda nada por facturar de él, y no se lo muestra «pendiente» con $0
         (Drean S06100, obra facturada por anticipos; criterio acordado 25/11/2026).
@@ -623,6 +633,7 @@ class StockPicking(models.Model):
             total += self._guvens_convertir(
                 importe, linea.currency_id, moneda, fecha)
 
+        bruto = total
         # Anticipos facturados y todavía no descontados: esa parte ya está
         # facturada, lo que queda por facturar es el resto (ERAMINE S06332:
         # 15.721 de mercadería − 4.716,30 de anticipo = 11.004,70, el 70%).
@@ -641,7 +652,7 @@ class StockPicking(models.Model):
                         linea.price_unit * linea.qty_invoiced,
                         linea.currency_id, moneda, fecha)
                     for linea in anticipos)
-                cubierto = total > 0 and descontado >= total
+                cubierto = bruto > 0 and descontado >= bruto
                 total = max(total - descontado, 0.0)
             else:
                 incompleto = True
@@ -654,7 +665,7 @@ class StockPicking(models.Model):
             for l in m.invoice_line_ids
         ):
             incompleto = True
-        return total, moneda, incompleto, fecha, cubierto
+        return total, moneda, incompleto, fecha, cubierto, bruto
 
     @api.depends(
         "guvens_plazo_estado",
@@ -697,13 +708,23 @@ class StockPicking(models.Model):
             if picking.guvens_plazo_estado not in ("pendiente", "no_factura"):
                 continue
 
-            total, moneda, incompleto, fecha, _cubierto = picking._guvens_valor_pendiente()
+            total, moneda, incompleto, fecha, _cubierto, _bruto = \
+                picking._guvens_valor_pendiente()
 
             picking.guvens_valor_moneda_id = moneda
             picking.guvens_valor_sin_facturar = total
             picking.guvens_valor_sin_facturar_ars = picking._guvens_convertir(
                 total, moneda, picking.company_id.currency_id, fecha)
             picking.guvens_valor_incompleto = incompleto
+
+    @api.depends("guvens_plazo_estado", "guvens_valor_sin_facturar")
+    def _compute_guvens_porcentaje_sin_facturar(self):
+        for picking in self:
+            picking.guvens_porcentaje_sin_facturar = 0.0
+            if picking.guvens_plazo_estado not in ("pendiente", "no_factura"):
+                continue
+            total, _m, _i, _f, _c, bruto = picking._guvens_valor_pendiente()
+            picking.guvens_porcentaje_sin_facturar = total / bruto if bruto else 0.0
 
     @api.model
     def _guvens_cron_dias_sin_facturar(self):
