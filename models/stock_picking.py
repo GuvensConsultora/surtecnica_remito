@@ -197,47 +197,56 @@ class StockPicking(models.Model):
              "refresque.",
     )
     # --- cumplimiento del plazo: el indicador mensual que pidió Franco (26/11/2026) ---
-    # Cuenta sólo lo que depende de nosotros: en plazo, excedido, y los que todavía no
-    # se facturaron pero ya pasaron el plazo. Quedan afuera HES, «no se factura»,
-    # facturados antes del remito y los no determinables.
+    # Cuenta sólo lo que depende de nosotros, con LAS MISMAS palabras y cantidades que
+    # «Plazo de facturación» para que los dos informes no se contradigan: dentro del
+    # plazo, excedidos, y los pendientes de facturar que ya pasaron el plazo (que allá
+    # figuran como «Pendiente de facturar»). Quedan afuera HES, «no se factura»,
+    # facturados antes del remito, no determinables y pendientes todavía en plazo.
     guvens_cumplimiento = fields.Selection(
         selection=[
-            ("en_tiempo", "En tiempo y forma"),
-            ("fuera", "Fuera de plazo"),
+            ("en_plazo", "Dentro del plazo"),
+            ("excedido", "Excedido"),
+            ("pendiente_vencido", "Pendiente de facturar, plazo vencido"),
         ],
         string="Cumplimiento del plazo",
         compute="_compute_guvens_cumplimiento",
         store=True,
-        help="Si el remito entra en el indicador de cumplimiento y cómo.\n\n"
-             "• «En tiempo y forma»: facturado dentro del plazo.\n"
-             "• «Fuera de plazo»: facturado después del plazo, o todavía sin facturar "
-             "y con el plazo ya vencido. Este segundo caso cuenta a propósito: si no, "
-             "el mes en curso parecería mejor de lo que es, porque sólo entrarían los "
-             "que ya se facturaron rápido.\n\n"
+        help="Cómo entra el remito en el indicador mensual de cumplimiento.\n\n"
+             "• «Dentro del plazo» y «Excedido»: los mismos remitos que en «Plazo de "
+             "facturación».\n"
+             "• «Pendiente de facturar, plazo vencido»: en «Plazo de facturación» "
+             "figuran como «Pendiente de facturar»; acá se separan los que ya pasaron "
+             "el plazo, porque si no el mes en curso parecería mejor de lo que es.\n\n"
              "Vacío = no entra en el indicador (HES / autorización, no se factura, "
-             "facturado antes del remito, no determinable, o sin facturar y todavía "
+             "facturado antes del remito, no determinable, o pendiente todavía "
              "dentro del plazo).",
     )
-    guvens_en_tiempo = fields.Integer(
-        string="En tiempo y forma",
+    guvens_cnt_en_plazo = fields.Integer(
+        string="Dentro del plazo",
         compute="_compute_guvens_cumplimiento",
         store=True,
         help="1 si el remito se facturó dentro del plazo. Sumado da la cantidad.",
     )
-    guvens_fuera_plazo = fields.Integer(
-        string="Fuera de plazo",
+    guvens_cnt_excedido = fields.Integer(
+        string="Excedidos",
         compute="_compute_guvens_cumplimiento",
         store=True,
-        help="1 si el remito se facturó fuera del plazo o sigue sin facturar con el "
-             "plazo vencido. Sumado da la cantidad.",
+        help="1 si el remito se facturó después del plazo. Sumado da la cantidad.",
+    )
+    guvens_cnt_pendiente_vencido = fields.Integer(
+        string="Pendientes con plazo vencido",
+        compute="_compute_guvens_cumplimiento",
+        store=True,
+        help="1 si el remito sigue sin facturar y ya pasó el plazo. Sumado da la "
+             "cantidad.",
     )
     guvens_cumplimiento_pct = fields.Float(
-        string="% en tiempo y forma",
+        string="% dentro del plazo",
         compute="_compute_guvens_cumplimiento",
         store=True,
         group_operator="avg",
-        help="100 si está en tiempo y forma, 0 si está fuera de plazo. El promedio de "
-             "un mes da el porcentaje de cumplimiento de ese mes.",
+        help="100 si se facturó dentro del plazo, 0 si está excedido o pendiente con "
+             "el plazo vencido. El promedio de un mes da el porcentaje de ese mes.",
     )
     guvens_porcentaje_sin_facturar = fields.Float(
         string="% sin facturar",
@@ -769,23 +778,22 @@ class StockPicking(models.Model):
         """Clasifica el remito para el indicador mensual de cumplimiento.
 
         Depende de los días sin facturar: el cron diario los refresca, y así un
-        remito pendiente pasa solo a «fuera de plazo» el día que se le vence.
+        remito pendiente pasa solo a «plazo vencido» el día que se le vence.
         """
         for picking in self:
             estado = picking.guvens_plazo_estado
             plazo = picking.company_id.guvens_plazo_facturacion_dias
-            if estado == "en_plazo":
-                valor = "en_tiempo"
-            elif estado == "excedido":
-                valor = "fuera"
+            if estado in ("en_plazo", "excedido"):
+                valor = estado
             elif estado == "pendiente" and plazo and picking.guvens_dias_sin_facturar > plazo:
-                valor = "fuera"
+                valor = "pendiente_vencido"
             else:
                 valor = False
             picking.guvens_cumplimiento = valor
-            picking.guvens_en_tiempo = 1 if valor == "en_tiempo" else 0
-            picking.guvens_fuera_plazo = 1 if valor == "fuera" else 0
-            picking.guvens_cumplimiento_pct = 100.0 if valor == "en_tiempo" else 0.0
+            picking.guvens_cnt_en_plazo = 1 if valor == "en_plazo" else 0
+            picking.guvens_cnt_excedido = 1 if valor == "excedido" else 0
+            picking.guvens_cnt_pendiente_vencido = 1 if valor == "pendiente_vencido" else 0
+            picking.guvens_cumplimiento_pct = 100.0 if valor == "en_plazo" else 0.0
 
     @api.depends("guvens_plazo_estado", "guvens_valor_sin_facturar")
     def _compute_guvens_porcentaje_sin_facturar(self):

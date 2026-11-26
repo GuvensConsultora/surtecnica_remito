@@ -10,7 +10,8 @@ def migrate(cr, version):
     cr.execute("""
         ALTER TABLE stock_picking
             ADD COLUMN IF NOT EXISTS guvens_cumplimiento varchar,
-            ADD COLUMN IF NOT EXISTS guvens_en_tiempo integer,
-            ADD COLUMN IF NOT EXISTS guvens_fuera_plazo integer,
+            ADD COLUMN IF NOT EXISTS guvens_cnt_en_plazo integer,
+            ADD COLUMN IF NOT EXISTS guvens_cnt_excedido integer,
+            ADD COLUMN IF NOT EXISTS guvens_cnt_pendiente_vencido integer,
             ADD COLUMN IF NOT EXISTS guvens_cumplimiento_pct double precision
     """)

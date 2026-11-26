@@ -1,8 +1,8 @@
 """Calcula el indicador de cumplimiento sólo en los remitos con fecha de confección."""
 from odoo import api, SUPERUSER_ID
 
-CAMPOS = ("guvens_cumplimiento", "guvens_en_tiempo", "guvens_fuera_plazo",
-          "guvens_cumplimiento_pct")
+CAMPOS = ("guvens_cumplimiento", "guvens_cnt_en_plazo", "guvens_cnt_excedido",
+          "guvens_cnt_pendiente_vencido", "guvens_cumplimiento_pct")
 
 
 def migrate(cr, version):

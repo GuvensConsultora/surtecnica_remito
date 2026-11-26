@@ -175,7 +175,8 @@
 
     <!-- ============ CUMPLIMIENTO MENSUAL ============ -->
     <!-- Pedido de Franco (26/11/2026): qué parte de los remitos de cada mes se
-         facturó en tiempo y forma, para fijar una meta anual. Sólo entran los que
+         facturó dentro del plazo, para fijar una meta anual. Usa las mismas palabras y
+         cantidades que «Plazo de facturación». Sólo entran los que
          dependen de nosotros (ver ayuda de «Cumplimiento del plazo»). -->
     <record id="view_picking_pivot_cumplimiento" model="ir.ui.view">
         <field name="name">stock.picking.pivot.cumplimiento</field>
@@ -183,8 +184,9 @@
         <field name="arch" type="xml">
             <pivot string="Cumplimiento mensual" sample="0">
                 <field name="guvens_remito_fecha" interval="month" type="row"/>
-                <field name="guvens_en_tiempo" type="measure"/>
-                <field name="guvens_fuera_plazo" type="measure"/>
+                <field name="guvens_cnt_en_plazo" type="measure"/>
+                <field name="guvens_cnt_excedido" type="measure"/>
+                <field name="guvens_cnt_pendiente_vencido" type="measure"/>
                 <field name="guvens_cumplimiento_pct" type="measure"/>
             </pivot>
         </field>
@@ -212,9 +214,9 @@
                 Todavía no hay remitos para medir
             </p>
             <p>
-                Cada mes muestra cuántos remitos se facturaron en tiempo y forma,
-                cuántos fuera de plazo (incluidos los que siguen sin facturar con el
-                plazo vencido) y el porcentaje de cumplimiento. No cuentan los que
+                Cada mes muestra cuántos remitos se facturaron dentro del plazo,
+                cuántos están excedidos, cuántos siguen pendientes de facturar con el
+                plazo vencido, y el porcentaje dentro del plazo. No cuentan los que
                 esperan HES / autorización ni los que no se facturan.
             </p>
         </field>
