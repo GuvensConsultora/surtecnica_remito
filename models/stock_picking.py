@@ -369,18 +369,22 @@ class StockPicking(models.Model):
         factura del remito, el remito figuraría «facturado antes del remito» y el
         saldo pendiente quedaría oculto (caso ERAMINE S06332, anticipo del 30%,
         pedido de Franco del 25/11/2026). Las facturas finales que descuentan un
-        anticipo siguen contando: tienen líneas de producto, no sólo de anticipo.
+        anticipo siguen contando: facturan productos del pedido.
+
+        El criterio es positivo —factura al menos un producto del pedido— y no
+        «no es anticipo»: hay anticipos con un renglón agregado a mano sin vínculo
+        con el pedido (Drean S06100, «10% por finalización de obra»), y tomarlos
+        como facturación de mercadería daba el remito por facturado.
         """
-        def solo_anticipo(factura):
-            lineas = factura.invoice_line_ids.filtered(
-                lambda l: l.display_type == "product")
-            return bool(lineas) and all(
-                l.sale_line_ids and all(l.sale_line_ids.mapped("is_downpayment"))
-                for l in lineas)
+        def factura_productos(factura):
+            return any(
+                l.sale_line_ids.filtered(lambda s: not s.is_downpayment)
+                for l in factura.invoice_line_ids
+                if l.display_type == "product")
 
         return pedido.invoice_ids.filtered(
             lambda m: m.move_type == "out_invoice" and m.state == "posted"
-            and not solo_anticipo(m))
+            and factura_productos(m))
 
     def _guvens_factura_del_remito(self):
         """La factura que corresponde a este remito, o False si no se puede saber.
@@ -658,6 +662,15 @@ class StockPicking(models.Model):
                     total = max(total, 0.0)
                 else:
                     incompleto = True
+            # Un renglón facturado sin vínculo con el pedido (agregado a mano) no se
+            # puede descontar con certeza: el valor se muestra, marcado incompleto.
+            if pedido and any(
+                l.display_type == "product" and not l.sale_line_ids
+                for m in pedido.invoice_ids
+                if m.move_type == "out_invoice" and m.state == "posted"
+                for l in m.invoice_line_ids
+            ):
+                incompleto = True
 
             picking.guvens_valor_moneda_id = moneda
             picking.guvens_valor_sin_facturar = total

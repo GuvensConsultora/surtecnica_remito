@@ -1,6 +1,6 @@
 """Recalcula el plazo y el valor sin facturar de los remitos con anticipos.
 
-Desde 1.21.0 una factura que es sólo de anticipo no cuenta como factura del remito
+Desde 1.21.0 (criterio afinado en 1.22.0) una factura que no factura productos del pedido no cuenta como factura del remito
 (caso ERAMINE S06332). Los campos son almacenados y el deploy no los recalcula solo:
 se recalculan acá, acotados a los remitos de pedidos con líneas de anticipo.
 """
