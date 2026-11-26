@@ -444,8 +444,16 @@ class StockPicking(models.Model):
         "sale_id.picking_ids.guvens_remito_fecha",
         "guvens_remito_requiere_hes",
         "guvens_motivo_no_facturado",
+        "sale_id.order_line.qty_invoiced",
+        "move_ids.state",
+        "move_ids.quantity",
+        "move_ids.product_uom_qty",
+        "move_ids.sale_line_id",
     )
     def _compute_guvens_plazo(self):
+        def hay_anticipo_que_cubre(picking):
+            return picking._guvens_valor_pendiente()[4]
+
         for picking in self:
             picking.guvens_factura_id = False
             picking.guvens_dias_a_factura = 0
@@ -465,6 +473,10 @@ class StockPicking(models.Model):
                     # No está esperando: nadie va a facturarlo. Si quedara «pendiente»
                     # envejecería para siempre y treparía en el ranking de demoras.
                     picking.guvens_plazo_estado = "no_factura"
+                elif hay_anticipo_que_cubre(picking):
+                    # Los anticipos ya facturados cubren lo que salió: no está
+                    # esperando factura, y atribuirle un plazo sería inventarlo.
+                    picking.guvens_plazo_estado = "indeterminado"
                 else:
                     picking.guvens_plazo_estado = "pendiente"
                 continue
@@ -569,6 +581,81 @@ class StockPicking(models.Model):
             return importe
         return desde._convert(importe, hasta, self.company_id, fecha)
 
+    def _guvens_valor_pendiente(self):
+        """Valor de lo que salió con este remito, menos los anticipos no aplicados.
+
+        Devuelve (total, moneda, incompleto, fecha, cubierto). `cubierto` es True
+        cuando los anticipos ya facturados alcanzan todo lo que salió con el remito:
+        no queda nada por facturar de él, y no se lo muestra «pendiente» con $0
+        (Drean S06100, obra facturada por anticipos; criterio acordado 25/11/2026).
+        """
+        self.ensure_one()
+        cubierto = False
+        fecha = (self._guvens_fecha_local(self.guvens_remito_fecha)
+                 if self.guvens_remito_fecha
+                 else fields.Date.context_today(self))
+        moneda = self.sale_id.currency_id
+        total = 0.0
+        incompleto = False
+
+        for move in self.move_ids:
+            # La cantidad cargada, y si no hay ninguna la demanda: el remito se
+            # imprime sin validar el albarán —es una decisión del operador, no un
+            # paso de este circuito—, así que en la mayoría `quantity` está en
+            # cero y la mercadería igual salió. Medido en testing el 21/10/2026:
+            # 6 de los 26 remitos sin facturar con pedido de una sola entrega
+            # quedaban en $0 por esto, entre ellos uno de $342.831,31.
+            cantidad_move = move.quantity or move.product_uom_qty
+            if move.state == "cancel" or not cantidad_move:
+                continue
+            linea = move.sale_line_id
+            if not linea:
+                incompleto = True
+                continue
+            if move.product_uom and linea.product_uom:
+                cantidad = move.product_uom._compute_quantity(
+                    cantidad_move, linea.product_uom)
+            else:
+                cantidad = cantidad_move
+            importe = cantidad * self._guvens_precio_unitario(linea)
+            if not moneda:
+                moneda = linea.currency_id
+            total += self._guvens_convertir(
+                importe, linea.currency_id, moneda, fecha)
+
+        # Anticipos facturados y todavía no descontados: esa parte ya está
+        # facturada, lo que queda por facturar es el resto (ERAMINE S06332:
+        # 15.721 de mercadería − 4.716,30 de anticipo = 11.004,70, el 70%).
+        # Sólo se descuenta con un único remito en el pedido; con varios, no hay
+        # forma de saber a cuál corresponde el anticipo y el valor se marca
+        # incompleto en lugar de repartirlo a ojo.
+        pedido = self.sale_id
+        anticipos = pedido.order_line.filtered(
+            lambda l: l.is_downpayment and not l.display_type and l.qty_invoiced
+        ) if pedido else pedido
+        if anticipos:
+            remitos = pedido.picking_ids.filtered(lambda p: p.guvens_remito_number)
+            if len(remitos) <= 1:
+                descontado = sum(
+                    self._guvens_convertir(
+                        linea.price_unit * linea.qty_invoiced,
+                        linea.currency_id, moneda, fecha)
+                    for linea in anticipos)
+                cubierto = total > 0 and descontado >= total
+                total = max(total - descontado, 0.0)
+            else:
+                incompleto = True
+        # Un renglón facturado sin vínculo con el pedido (agregado a mano) no se
+        # puede descontar con certeza: el valor se muestra, marcado incompleto.
+        if pedido and any(
+            l.display_type == "product" and not l.sale_line_ids
+            for m in pedido.invoice_ids
+            if m.move_type == "out_invoice" and m.state == "posted"
+            for l in m.invoice_line_ids
+        ):
+            incompleto = True
+        return total, moneda, incompleto, fecha, cubierto
+
     @api.depends(
         "guvens_plazo_estado",
         "guvens_remito_fecha",
@@ -610,67 +697,7 @@ class StockPicking(models.Model):
             if picking.guvens_plazo_estado not in ("pendiente", "no_factura"):
                 continue
 
-            fecha = (picking._guvens_fecha_local(picking.guvens_remito_fecha)
-                     if picking.guvens_remito_fecha
-                     else fields.Date.context_today(picking))
-            moneda = picking.sale_id.currency_id
-            total = 0.0
-            incompleto = False
-
-            for move in picking.move_ids:
-                # La cantidad cargada, y si no hay ninguna la demanda: el remito se
-                # imprime sin validar el albarán —es una decisión del operador, no un
-                # paso de este circuito—, así que en la mayoría `quantity` está en
-                # cero y la mercadería igual salió. Medido en testing el 21/10/2026:
-                # 6 de los 26 remitos sin facturar con pedido de una sola entrega
-                # quedaban en $0 por esto, entre ellos uno de $342.831,31.
-                cantidad_move = move.quantity or move.product_uom_qty
-                if move.state == "cancel" or not cantidad_move:
-                    continue
-                linea = move.sale_line_id
-                if not linea:
-                    incompleto = True
-                    continue
-                if move.product_uom and linea.product_uom:
-                    cantidad = move.product_uom._compute_quantity(
-                        cantidad_move, linea.product_uom)
-                else:
-                    cantidad = cantidad_move
-                importe = cantidad * picking._guvens_precio_unitario(linea)
-                if not moneda:
-                    moneda = linea.currency_id
-                total += picking._guvens_convertir(
-                    importe, linea.currency_id, moneda, fecha)
-
-            # Anticipos facturados y todavía no descontados: esa parte ya está
-            # facturada, lo que queda por facturar es el resto (ERAMINE S06332:
-            # 15.721 de mercadería − 4.716,30 de anticipo = 11.004,70, el 70%).
-            # Sólo se descuenta con un único remito en el pedido; con varios, no hay
-            # forma de saber a cuál corresponde el anticipo y el valor se marca
-            # incompleto en lugar de repartirlo a ojo.
-            pedido = picking.sale_id
-            anticipos = pedido.order_line.filtered(
-                lambda l: l.is_downpayment and not l.display_type and l.qty_invoiced
-            ) if pedido else pedido
-            if anticipos:
-                remitos = pedido.picking_ids.filtered(lambda p: p.guvens_remito_number)
-                if len(remitos) <= 1:
-                    for linea in anticipos:
-                        total -= picking._guvens_convertir(
-                            linea.price_unit * linea.qty_invoiced,
-                            linea.currency_id, moneda, fecha)
-                    total = max(total, 0.0)
-                else:
-                    incompleto = True
-            # Un renglón facturado sin vínculo con el pedido (agregado a mano) no se
-            # puede descontar con certeza: el valor se muestra, marcado incompleto.
-            if pedido and any(
-                l.display_type == "product" and not l.sale_line_ids
-                for m in pedido.invoice_ids
-                if m.move_type == "out_invoice" and m.state == "posted"
-                for l in m.invoice_line_ids
-            ):
-                incompleto = True
+            total, moneda, incompleto, fecha, _cubierto = picking._guvens_valor_pendiente()
 
             picking.guvens_valor_moneda_id = moneda
             picking.guvens_valor_sin_facturar = total
