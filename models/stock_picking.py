@@ -360,6 +360,28 @@ class StockPicking(models.Model):
                 puestos += 1
         return dia
 
+    @api.model
+    def _guvens_facturas_de_entrega(self, pedido):
+        """Facturas publicadas del pedido que facturan mercadería, no sólo anticipo.
+
+        Una factura de anticipo cobra por adelantado, pero no factura lo que sale con
+        el remito: eso se factura después, descontando el anticipo. Si contara como
+        factura del remito, el remito figuraría «facturado antes del remito» y el
+        saldo pendiente quedaría oculto (caso ERAMINE S06332, anticipo del 30%,
+        pedido de Franco del 25/11/2026). Las facturas finales que descuentan un
+        anticipo siguen contando: tienen líneas de producto, no sólo de anticipo.
+        """
+        def solo_anticipo(factura):
+            lineas = factura.invoice_line_ids.filtered(
+                lambda l: l.display_type == "product")
+            return bool(lineas) and all(
+                l.sale_line_ids and all(l.sale_line_ids.mapped("is_downpayment"))
+                for l in lineas)
+
+        return pedido.invoice_ids.filtered(
+            lambda m: m.move_type == "out_invoice" and m.state == "posted"
+            and not solo_anticipo(m))
+
     def _guvens_factura_del_remito(self):
         """La factura que corresponde a este remito, o False si no se puede saber.
 
@@ -384,12 +406,10 @@ class StockPicking(models.Model):
         pedido = self.sale_id
         if not pedido:
             return False
-        facturas = pedido.invoice_ids.filtered(
-            lambda m: m.move_type == "out_invoice" and m.state == "posted"
-        )
+        facturas = self._guvens_facturas_de_entrega(pedido)
         if not facturas:
             return False
-        remitos = pedido.picking_ids.filtered(lambda p: p.guvens_remito_number)
+        remitos =pedido.picking_ids.filtered(lambda p: p.guvens_remito_number)
         if len(facturas) == 1 and len(remitos) <= 1:
             return facturas
 
@@ -434,8 +454,7 @@ class StockPicking(models.Model):
                 # Sin pedido o con el apareo ambiguo. Se distingue para no mezclar
                 # "todavía no se facturó" con "no se puede saber".
                 pedido = picking.sale_id
-                hay_posteadas = pedido and pedido.invoice_ids.filtered(
-                    lambda m: m.move_type == "out_invoice" and m.state == "posted")
+                hay_posteadas = pedido and picking._guvens_facturas_de_entrega(pedido)
                 if hay_posteadas:
                     picking.guvens_plazo_estado = "indeterminado"
                 elif picking.guvens_motivo_no_facturado == "sin_factura":
@@ -561,6 +580,8 @@ class StockPicking(models.Model):
         "move_ids.sale_line_id.discount",
         "move_ids.sale_line_id.product_uom",
         "move_ids.sale_line_id.currency_id",
+        "sale_id.order_line.qty_invoiced",
+        "sale_id.picking_ids.guvens_remito_number",
     )
     def _compute_guvens_valor_sin_facturar(self):
         """Cuánto vale lo que salió con este remito y todavía no tiene factura.
@@ -616,6 +637,27 @@ class StockPicking(models.Model):
                     moneda = linea.currency_id
                 total += picking._guvens_convertir(
                     importe, linea.currency_id, moneda, fecha)
+
+            # Anticipos facturados y todavía no descontados: esa parte ya está
+            # facturada, lo que queda por facturar es el resto (ERAMINE S06332:
+            # 15.721 de mercadería − 4.716,30 de anticipo = 11.004,70, el 70%).
+            # Sólo se descuenta con un único remito en el pedido; con varios, no hay
+            # forma de saber a cuál corresponde el anticipo y el valor se marca
+            # incompleto en lugar de repartirlo a ojo.
+            pedido = picking.sale_id
+            anticipos = pedido.order_line.filtered(
+                lambda l: l.is_downpayment and not l.display_type and l.qty_invoiced
+            ) if pedido else pedido
+            if anticipos:
+                remitos = pedido.picking_ids.filtered(lambda p: p.guvens_remito_number)
+                if len(remitos) <= 1:
+                    for linea in anticipos:
+                        total -= picking._guvens_convertir(
+                            linea.price_unit * linea.qty_invoiced,
+                            linea.currency_id, moneda, fecha)
+                    total = max(total, 0.0)
+                else:
+                    incompleto = True
 
             picking.guvens_valor_moneda_id = moneda
             picking.guvens_valor_sin_facturar = total
